@@ -9,7 +9,7 @@ export default function HomePage() {
         </h1>
 
         <p className="mt-2 text-sm text-zinc-600">
-          База поднята. Дальше идём по MVP: справочники → поставщики/каталог → закупки → ссылка-приглашение → корзина.
+          MVP: справочники → поставщики/каталог → закупки → ссылка-приглашение → корзина.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
@@ -25,6 +25,13 @@ export default function HomePage() {
             className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-zinc-50"
           >
             Админка: Поставщики
+          </Link>
+
+          <Link
+            href="/admin/procurements"
+            className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-zinc-50"
+          >
+            Админка: Закупки
           </Link>
         </div>
       </div>

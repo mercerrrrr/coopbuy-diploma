@@ -1,79 +1,163 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
-
 
 datasource db {
   provider = "postgresql"
 }
 
+enum ProcurementStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELED
+}
+
+enum OrderStatus {
+  DRAFT
+  SUBMITTED
+  CANCELED
+}
+
 model Region {
-  id          String       @id @default(cuid())
-  name        String       @unique
-  createdAt   DateTime     @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  name      String   @unique
+
   settlements Settlement[]
 }
 
 model Settlement {
-  id           String        @id @default(cuid())
-  name         String
-  regionId     String
-  createdAt    DateTime      @default(now())
-  region       Region        @relation(fields: [regionId], references: [id], onDelete: Restrict)
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  name      String
+
+  regionId String
+  region   Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
   pickupPoints PickupPoint[]
+
+  // ✅ обратная связь для SupplierDeliveryZone
   supplierZones SupplierDeliveryZone[]
+
+  // ✅ обратная связь для Procurement
+  procurements Procurement[]
+
   @@unique([regionId, name])
 }
 
 model PickupPoint {
-  id           String     @id @default(cuid())
-  settlementId String
-  name         String
-  address      String
-  hasFreezer   Boolean    @default(false)
-  createdAt    DateTime   @default(now())
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  name       String
+  address    String
+  hasFreezer Boolean  @default(false)
 
-  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  settlementId String
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  // ✅ обратная связь для Procurement
+  procurements Procurement[]
 }
 
 model Supplier {
   id          String   @id @default(cuid())
-  name        String
+  createdAt   DateTime @default(now())
+  name        String   @unique
+  minOrderSum Int      @default(0)
   phone       String?
   email       String?
   isActive    Boolean  @default(true)
-  minOrderSum Int      @default(10000)
-  createdAt   DateTime @default(now())
 
-  zones       SupplierDeliveryZone[]
-  products    Product[]
+  zones    SupplierDeliveryZone[]
+  products Product[]
+
+  // ✅ обратная связь для Procurement
+  procurements Procurement[]
 }
 
 model SupplierDeliveryZone {
-  id           String     @id @default(cuid())
-  supplierId   String
-  settlementId String
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  isActive  Boolean  @default(true)
 
-  supplier     Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  settlementId String
   settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
 
   @@unique([supplierId, settlementId])
 }
 
 model Product {
-  id         String   @id @default(cuid())
-  supplierId String
-  sku        String?
-  name       String
-  category   String
-  unit       String
-  price      Int
-  imageUrl   String?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  name      String
+  category  String
+  unit      String
+  sku       String?
+  imageUrl  String?
+  price     Int
+  isActive  Boolean  @default(true)
 
+  supplierId String
   supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  // ✅ обратная связь для OrderItem
+  orderItems OrderItem[]
+}
+
+model Procurement {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status      ProcurementStatus @default(DRAFT)
+  title       String
+  inviteCode  String            @unique
+  deadlineAt  DateTime
+  minTotalSum Int               @default(0)
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  settlementId String
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+
+  pickupPointId String
+  pickupPoint   PickupPoint @relation(fields: [pickupPointId], references: [id], onDelete: Restrict)
+
+  orders Order[]
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status OrderStatus @default(DRAFT)
+
+  // MVP: без auth — гостевой заказ
+  participantName  String?
+  participantPhone String?
+
+  procurementId String
+  procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  qty   Int
+  price Int
 }
