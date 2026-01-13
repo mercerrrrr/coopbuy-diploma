@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Region {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  createdAt   DateTime     @default(now())
+  settlements Settlement[]
+}
+
+model Settlement {
+  id           String        @id @default(cuid())
+  name         String
+  regionId     String
+  createdAt    DateTime      @default(now())
+  region       Region        @relation(fields: [regionId], references: [id], onDelete: Restrict)
+  pickupPoints PickupPoint[]
+  supplierZones SupplierDeliveryZone[]
+  @@unique([regionId, name])
+}
+
+model PickupPoint {
+  id           String     @id @default(cuid())
+  settlementId String
+  name         String
+  address      String
+  hasFreezer   Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+}
+
+model Supplier {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  email       String?
+  isActive    Boolean  @default(true)
+  minOrderSum Int      @default(10000)
+  createdAt   DateTime @default(now())
+
+  zones       SupplierDeliveryZone[]
+  products    Product[]
+}
+
+model SupplierDeliveryZone {
+  id           String     @id @default(cuid())
+  supplierId   String
+  settlementId String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  supplier     Supplier   @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, settlementId])
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  supplierId String
+  sku        String?
+  name       String
+  category   String
+  unit       String
+  price      Int
+  imageUrl   String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+}
