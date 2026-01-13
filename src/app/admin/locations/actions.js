@@ -20,16 +20,17 @@ function prismaNiceError(e) {
   return "Ошибка базы данных. Подробности в терминале.";
 }
 
-export async function createRegion(formData) {
+export async function createRegion(_prev, formData) {
   const name = str(formData, "name");
-  if (!name) throw new Error("Название региона не может быть пустым.");
+  if (!name) return { ok: false, message: "Название региона не может быть пустым." };
 
   try {
     await prisma.region.create({ data: { name } });
     revalidatePath("/admin/locations");
+    return { ok: true, message: "Регион добавлен." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }
 
@@ -42,23 +43,23 @@ export async function deleteRegion(formData) {
     revalidatePath("/admin/locations");
   } catch (e) {
     console.error(e);
-    // Скорее всего Restrict из-за settlements
     throw new Error("Нельзя удалить регион, пока в нём есть населённые пункты.");
   }
 }
 
-export async function createSettlement(formData) {
+export async function createSettlement(_prev, formData) {
   const regionId = str(formData, "regionId");
   const name = str(formData, "name");
-  if (!regionId) throw new Error("Не передан regionId.");
-  if (!name) throw new Error("Название населённого пункта не может быть пустым.");
+  if (!regionId) return { ok: false, message: "Не передан regionId." };
+  if (!name) return { ok: false, message: "Название населённого пункта не может быть пустым." };
 
   try {
     await prisma.settlement.create({ data: { regionId, name } });
     revalidatePath("/admin/locations");
+    return { ok: true, message: "Населённый пункт добавлен." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }
 
@@ -75,24 +76,25 @@ export async function deleteSettlement(formData) {
   }
 }
 
-export async function createPickupPoint(formData) {
+export async function createPickupPoint(_prev, formData) {
   const settlementId = str(formData, "settlementId");
   const name = str(formData, "name");
   const address = str(formData, "address");
   const hasFreezer = bool(formData, "hasFreezer");
 
-  if (!settlementId) throw new Error("Не передан settlementId.");
-  if (!name) throw new Error("Название пункта выдачи не может быть пустым.");
-  if (!address) throw new Error("Адрес пункта выдачи не может быть пустым.");
+  if (!settlementId) return { ok: false, message: "Не передан settlementId." };
+  if (!name) return { ok: false, message: "Название пункта выдачи не может быть пустым." };
+  if (!address) return { ok: false, message: "Адрес пункта выдачи не может быть пустым." };
 
   try {
     await prisma.pickupPoint.create({
       data: { settlementId, name, address, hasFreezer },
     });
     revalidatePath("/admin/locations");
+    return { ok: true, message: "Пункт выдачи добавлен." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }
 

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+
 import {
   createRegion,
   deleteRegion,
@@ -7,6 +8,18 @@ import {
   createPickupPoint,
   deletePickupPoint,
 } from "./actions";
+
+import {
+  CreateRegionForm,
+  CreateSettlementForm,
+  CreatePickupPointForm,
+} from "./ClientForms";
+
+import {
+  DeleteRegionButton,
+  DeleteSettlementButton,
+  DeletePickupPointButton,
+} from "./DeleteButtons";
 
 export default async function LocationsPage() {
   const regions = await prisma.region.findMany({
@@ -29,49 +42,29 @@ export default async function LocationsPage() {
       {/* Создать регион */}
       <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
         <div className="text-sm font-medium">Добавить регион</div>
-
-        <form action={createRegion} className="mt-3 flex flex-wrap gap-3">
-          <input
-            name="name"
-            placeholder="Например: Астраханская область"
-            className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 md:w-105"
-          />
-          <button className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
-            Добавить
-          </button>
-        </form>
+        <CreateRegionForm action={createRegion} />
       </section>
 
       {/* Список регионов */}
       <div className="mt-6 space-y-4">
         {regions.map((r) => (
-          <section key={r.id} className="rounded-2xl border bg-white p-5 shadow-sm">
+          <section
+            key={r.id}
+            className="rounded-2xl border bg-white p-5 shadow-sm"
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-medium">{r.name}</h2>
 
-              <form action={deleteRegion}>
-                <input type="hidden" name="id" value={r.id} />
-                <button className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">
-                  Удалить регион
-                </button>
-              </form>
+              {/* Удаление региона — в Client Component (confirm) */}
+              <DeleteRegionButton regionId={r.id} action={deleteRegion} />
             </div>
 
             {/* Добавить населённый пункт */}
             <div className="mt-4 rounded-xl border bg-zinc-50 p-4">
-              <div className="text-sm font-medium">Добавить населённый пункт</div>
-
-              <form action={createSettlement} className="mt-3 flex flex-wrap gap-3">
-                <input type="hidden" name="regionId" value={r.id} />
-                <input
-                  name="name"
-                  placeholder="Например: Новолесное"
-                  className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 md:w-[320px]"
-                />
-                <button className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
-                  Добавить
-                </button>
-              </form>
+              <div className="text-sm font-medium">
+                Добавить населённый пункт
+              </div>
+              <CreateSettlementForm action={createSettlement} regionId={r.id} />
             </div>
 
             {/* Список населённых пунктов */}
@@ -81,44 +74,22 @@ export default async function LocationsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="font-medium">{s.name}</div>
 
-                    <form action={deleteSettlement}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <button className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-100">
-                        Удалить НП
-                      </button>
-                    </form>
+                    {/* Удаление НП — в Client Component (confirm) */}
+                    <DeleteSettlementButton
+                      settlementId={s.id}
+                      action={deleteSettlement}
+                    />
                   </div>
 
                   {/* Добавить пункт выдачи */}
                   <div className="mt-3 rounded-xl border bg-white p-4">
-                    <div className="text-sm font-medium">Добавить пункт выдачи</div>
-
-                    <form action={createPickupPoint} className="mt-3 grid gap-3 md:grid-cols-2">
-                      <input type="hidden" name="settlementId" value={s.id} />
-
-                      <input
-                        name="name"
-                        placeholder="Название (например: Пункт выдачи №1)"
-                        className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-                      />
-
-                      <input
-                        name="address"
-                        placeholder="Адрес (например: Центральная улица, дом 1)"
-                        className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-                      />
-
-                      <label className="flex items-center gap-2 text-sm text-zinc-700">
-                        <input type="checkbox" name="hasFreezer" className="h-4 w-4" />
-                        Есть морозилка
-                      </label>
-
-                      <div className="md:col-span-2">
-                        <button className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
-                          Добавить пункт
-                        </button>
-                      </div>
-                    </form>
+                    <div className="text-sm font-medium">
+                      Добавить пункт выдачи
+                    </div>
+                    <CreatePickupPointForm
+                      action={createPickupPoint}
+                      settlementId={s.id}
+                    />
                   </div>
 
                   {/* Список пунктов выдачи */}
@@ -131,7 +102,9 @@ export default async function LocationsPage() {
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <div className="font-medium">{p.name}</div>
-                              <div className="mt-1 text-sm text-zinc-600">{p.address}</div>
+                              <div className="mt-1 text-sm text-zinc-600">
+                                {p.address}
+                              </div>
                             </div>
 
                             <div className="flex items-center gap-3">
@@ -139,12 +112,11 @@ export default async function LocationsPage() {
                                 {p.hasFreezer ? "есть морозилка" : "без морозилки"}
                               </span>
 
-                              <form action={deletePickupPoint}>
-                                <input type="hidden" name="id" value={p.id} />
-                                <button className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">
-                                  Удалить
-                                </button>
-                              </form>
+                              {/* Удаление пункта — в Client Component (confirm) */}
+                              <DeletePickupPointButton
+                                pickupPointId={p.id}
+                                action={deletePickupPoint}
+                              />
                             </div>
                           </div>
                         </li>
