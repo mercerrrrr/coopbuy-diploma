@@ -3,6 +3,11 @@ require("dotenv/config");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL is not set in .env");
+  process.exit(1);
+}
+
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
 });
@@ -10,12 +15,14 @@ const adapter = new PrismaPg({
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  // Регион
   const region = await prisma.region.upsert({
     where: { name: "Астраханская область" },
     update: {},
     create: { name: "Астраханская область" },
   });
 
+  // Населённый пункт
   const settlement = await prisma.settlement.upsert({
     where: {
       regionId_name: { regionId: region.id, name: "Новолесное" },
@@ -24,29 +31,33 @@ async function main() {
     create: { name: "Новолесное", regionId: region.id },
   });
 
+  // Пункт выдачи (повторяемый seed)
+  const pickupName = "Пункт выдачи №1";
   const existingPickup = await prisma.pickupPoint.findFirst({
-    where: { settlementId: settlement.id, name: "Пункт выдачи №1" },
+    where: { settlementId: settlement.id, name: pickupName },
   });
 
   if (!existingPickup) {
     await prisma.pickupPoint.create({
       data: {
         settlementId: settlement.id,
-        name: "Пункт выдачи №1",
+        name: pickupName,
         address: "Центральная улица, дом 1 (ориентир: магазин)",
         hasFreezer: false,
       },
     });
   }
 
+  // Поставщик (повторяемый seed)
+  const supplierName = "Оптовик-Юг";
   let supplier = await prisma.supplier.findFirst({
-    where: { name: "Оптовик-Юг" },
+    where: { name: supplierName },
   });
 
   if (!supplier) {
     supplier = await prisma.supplier.create({
       data: {
-        name: "Оптовик-Юг",
+        name: supplierName,
         phone: "+7 (900) 000-00-00",
         email: "supplier@example.com",
         minOrderSum: 10000,
@@ -54,6 +65,7 @@ async function main() {
     });
   }
 
+  // Зона доставки (уникальная связка supplier+settlement)
   await prisma.supplierDeliveryZone.upsert({
     where: {
       supplierId_settlementId: {
@@ -65,6 +77,7 @@ async function main() {
     create: { supplierId: supplier.id, settlementId: settlement.id },
   });
 
+  // Товары: пересоздаём для чистоты
   await prisma.product.deleteMany({ where: { supplierId: supplier.id } });
 
   await prisma.product.createMany({
@@ -74,6 +87,8 @@ async function main() {
       { supplierId: supplier.id, name: "Порошок 3кг", category: "Хозтовары", unit: "шт", price: 450 },
     ],
   });
+
+  console.log("✅ Seed completed");
 }
 
 main()
