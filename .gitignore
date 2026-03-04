@@ -44,3 +44,9 @@ next-env.d.ts
 .github/instructions/snyk_rules.instructions.md
 
 /src/generated/prisma
+*.zip
+*.7z
+*.rar
+.env
+node_modules/
+.next/
