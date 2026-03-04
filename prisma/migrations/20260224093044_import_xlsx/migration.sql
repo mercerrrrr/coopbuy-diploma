@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "AuditAction" ADD VALUE 'IMPORT_PRICE_LIST';
+
+-- AlterEnum
+ALTER TYPE "EntityType" ADD VALUE 'SUPPLIER';

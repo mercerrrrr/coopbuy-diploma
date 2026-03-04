@@ -99,7 +99,7 @@ export function AddDeliveryZoneForm({ action, supplierId, settlements }) {
   );
 }
 
-export function CreateProductForm({ action, supplierId }) {
+export function CreateProductForm({ action, supplierId, categories, units }) {
   const [state, formAction] = useActionState(action, null);
 
   return (
@@ -113,17 +113,27 @@ export function CreateProductForm({ action, supplierId }) {
           className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
         />
 
-        <input
-          name="category"
-          placeholder="Категория (например: Крупы / Хозтовары)"
+        <select
+          name="categoryId"
+          defaultValue=""
           className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
+        >
+          <option value="" disabled>Категория…</option>
+          {(categories ?? []).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
 
-        <input
-          name="unit"
-          placeholder="Ед. изм. (например: шт / кг)"
+        <select
+          name="unitId"
+          defaultValue=""
           className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
+        >
+          <option value="" disabled>Единица измерения…</option>
+          {(units ?? []).map((u) => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
 
         <input
           name="price"

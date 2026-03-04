@@ -1,27 +1,12 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { str, num, prismaNiceError } from "@/lib/formUtils";
 import { revalidatePath } from "next/cache";
+import { assertAdmin } from "@/lib/guards";
 
-function str(fd, key) {
-  return String(fd.get(key) ?? "").trim();
-}
-
-function num(fd, key) {
-  const raw = str(fd, key).replace(",", ".");
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : NaN;
-}
-
-function prismaNiceError(e) {
-  const code = e?.code;
-  if (code === "P2002") return "Уже существует запись с таким значением (уникальность).";
-  if (code === "P2003") return "Нельзя выполнить: есть связанные записи.";
-  return "Ошибка базы данных. Подробности в терминале.";
-}
-
-/** Создать поставщика */
 export async function createSupplier(_prev, fd) {
+  await assertAdmin();
   const name = str(fd, "name");
   const minOrderSum = Math.trunc(num(fd, "minOrderSum"));
   const phone = str(fd, "phone") || null;
@@ -43,21 +28,21 @@ export async function createSupplier(_prev, fd) {
   }
 }
 
-/** Переключить активность поставщика */
 export async function toggleSupplierActive(fd) {
+  await assertAdmin();
   const id = str(fd, "id");
-  const current = str(fd, "current");
-
   if (!id) throw new Error("Не передан id поставщика.");
 
-  const isActive = current !== "true"; // переворачиваем
-  await prisma.supplier.update({ where: { id }, data: { isActive } });
+  // Читаем актуальное состояние из БД, не доверяем hidden input
+  const supplier = await prisma.supplier.findUnique({ where: { id }, select: { isActive: true } });
+  if (!supplier) throw new Error("Поставщик не найден.");
 
+  await prisma.supplier.update({ where: { id }, data: { isActive: !supplier.isActive } });
   revalidatePath("/admin/suppliers");
 }
 
-/** Удалить поставщика */
 export async function deleteSupplier(fd) {
+  await assertAdmin();
   const id = str(fd, "id");
   if (!id) throw new Error("Не передан id поставщика.");
 
@@ -66,12 +51,12 @@ export async function deleteSupplier(fd) {
     revalidatePath("/admin/suppliers");
   } catch (e) {
     console.error(e);
-    throw new Error("Нельзя удалить поставщика: есть зоны доставки или товары.");
+    throw new Error(prismaNiceError(e));
   }
 }
 
-/** Добавить зону доставки (привязка поставщик → населённый пункт) */
 export async function addDeliveryZone(_prev, fd) {
+  await assertAdmin();
   const supplierId = str(fd, "supplierId");
   const settlementId = str(fd, "settlementId");
 
@@ -93,8 +78,8 @@ export async function addDeliveryZone(_prev, fd) {
   }
 }
 
-/** Удалить зону доставки */
 export async function deleteDeliveryZone(fd) {
+  await assertAdmin();
   const id = str(fd, "id");
   if (!id) throw new Error("Не передан id зоны доставки.");
 
@@ -107,26 +92,40 @@ export async function deleteDeliveryZone(fd) {
   }
 }
 
-/** Добавить товар */
 export async function createProduct(_prev, fd) {
+  await assertAdmin();
   const supplierId = str(fd, "supplierId");
   const name = str(fd, "name");
-  const category = str(fd, "category");
-  const unit = str(fd, "unit");
+  const categoryId = str(fd, "categoryId");
+  const unitId = str(fd, "unitId");
   const sku = str(fd, "sku") || null;
-  const imageUrl = str(fd, "imageUrl") || null;
+  const imageUrlRaw = str(fd, "imageUrl") || null;
   const price = Math.trunc(num(fd, "price"));
 
   if (!supplierId) return { ok: false, message: "Не передан supplierId." };
   if (!name) return { ok: false, message: "Название товара не может быть пустым." };
-  if (!category) return { ok: false, message: "Категория не может быть пустой." };
-  if (!unit) return { ok: false, message: "Единица измерения не может быть пустой." };
+  if (!categoryId) return { ok: false, message: "Выбери категорию." };
+  if (!unitId) return { ok: false, message: "Выбери единицу измерения." };
   if (!Number.isFinite(price) || price <= 0)
     return { ok: false, message: "Цена должна быть числом > 0." };
 
+  // Валидация URL изображения
+  let imageUrl = null;
+  if (imageUrlRaw) {
+    try {
+      const parsed = new URL(imageUrlRaw);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        return { ok: false, message: "imageUrl должен начинаться с https:// или http://" };
+      }
+      imageUrl = imageUrlRaw;
+    } catch {
+      return { ok: false, message: "imageUrl имеет некорректный формат URL." };
+    }
+  }
+
   try {
     await prisma.product.create({
-      data: { supplierId, name, category, unit, sku, imageUrl, price, isActive: true },
+      data: { supplierId, name, categoryId, unitId, sku, imageUrl, price, isActive: true },
     });
     revalidatePath("/admin/suppliers");
     return { ok: true, message: "Товар добавлен." };
@@ -136,8 +135,8 @@ export async function createProduct(_prev, fd) {
   }
 }
 
-/** Удалить товар */
 export async function deleteProduct(fd) {
+  await assertAdmin();
   const id = str(fd, "id");
   if (!id) throw new Error("Не передан id товара.");
 

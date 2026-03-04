@@ -21,6 +21,11 @@ import {
   DeletePickupPointButton,
 } from "./DeleteButtons";
 
+import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { MapPin, Building2, Navigation } from "lucide-react";
+
 export default async function LocationsPage() {
   const regions = await prisma.region.findMany({
     orderBy: { name: "asc" },
@@ -33,100 +38,134 @@ export default async function LocationsPage() {
   });
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Локации</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Справочники регионов/населённых пунктов/пунктов выдачи (без хардкода).
-      </p>
+    <main className="mx-auto max-w-5xl p-6 space-y-6">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-2 text-zinc-400 text-xs mb-1.5">
+          <MapPin size={13} />
+          <span>Локации</span>
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Локации</h1>
+        <p className="mt-0.5 text-sm text-zinc-500">
+          Регионы, населённые пункты и пункты выдачи
+        </p>
+      </div>
 
-      {/* Создать регион */}
-      <section className="mt-6 rounded-2xl border bg-white p-5 shadow-sm">
-        <div className="text-sm font-medium">Добавить регион</div>
-        <CreateRegionForm action={createRegion} />
-      </section>
+      {/* Add region form */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Добавить регион</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <CreateRegionForm action={createRegion} />
+        </CardBody>
+      </Card>
 
-      {/* Список регионов */}
-      <div className="mt-6 space-y-4">
+      {/* Empty state */}
+      {regions.length === 0 && (
+        <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+          <EmptyState
+            icon={<MapPin size={36} />}
+            title="Регионов пока нет"
+            description="Добавьте первый регион с помощью формы выше"
+          />
+        </div>
+      )}
+
+      {/* Regions list */}
+      <div className="space-y-4">
         {regions.map((r) => (
-          <section
-            key={r.id}
-            className="rounded-2xl border bg-white p-5 shadow-sm"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-medium">{r.name}</h2>
-
-              {/* Удаление региона — в Client Component (confirm) */}
-              <DeleteRegionButton regionId={r.id} action={deleteRegion} />
-            </div>
-
-            {/* Добавить населённый пункт */}
-            <div className="mt-4 rounded-xl border bg-zinc-50 p-4">
-              <div className="text-sm font-medium">
-                Добавить населённый пункт
+          <Card key={r.id}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Navigation size={15} className="text-indigo-500" />
+                <h2 className="text-base font-semibold text-zinc-900">{r.name}</h2>
+                <Badge variant="neutral">
+                  {r.settlements.length} нас. пунктов
+                </Badge>
               </div>
-              <CreateSettlementForm action={createSettlement} regionId={r.id} />
-            </div>
+              <DeleteRegionButton regionId={r.id} action={deleteRegion} />
+            </CardHeader>
 
-            {/* Список населённых пунктов */}
-            <div className="mt-4 space-y-3">
-              {r.settlements.map((s) => (
-                <div key={s.id} className="rounded-xl border bg-zinc-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="font-medium">{s.name}</div>
+            <CardBody className="space-y-3">
+              {/* Add settlement form */}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4">
+                <div className="text-xs font-medium text-zinc-500 mb-2">
+                  Добавить населённый пункт
+                </div>
+                <CreateSettlementForm action={createSettlement} regionId={r.id} />
+              </div>
 
-                    {/* Удаление НП — в Client Component (confirm) */}
-                    <DeleteSettlementButton
-                      settlementId={s.id}
-                      action={deleteSettlement}
-                    />
-                  </div>
+              {/* Settlements list */}
+              {r.settlements.length === 0 ? (
+                <p className="text-sm text-zinc-400 text-center py-2">
+                  Населённых пунктов нет
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {r.settlements.map((s) => (
+                    <div
+                      key={s.id}
+                      className="rounded-xl border border-zinc-200 bg-zinc-50/30 p-4 space-y-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Building2 size={14} className="text-zinc-400" />
+                          <span className="font-medium text-zinc-800">{s.name}</span>
+                          <Badge variant="neutral">
+                            {s.pickupPoints.length} пунктов
+                          </Badge>
+                        </div>
+                        <DeleteSettlementButton
+                          settlementId={s.id}
+                          action={deleteSettlement}
+                        />
+                      </div>
 
-                  {/* Добавить пункт выдачи */}
-                  <div className="mt-3 rounded-xl border bg-white p-4">
-                    <div className="text-sm font-medium">
-                      Добавить пункт выдачи
-                    </div>
-                    <CreatePickupPointForm
-                      action={createPickupPoint}
-                      settlementId={s.id}
-                    />
-                  </div>
+                      {/* Add pickup point */}
+                      <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                        <div className="text-xs font-medium text-zinc-500 mb-2">
+                          Добавить пункт выдачи
+                        </div>
+                        <CreatePickupPointForm
+                          action={createPickupPoint}
+                          settlementId={s.id}
+                        />
+                      </div>
 
-                  {/* Список пунктов выдачи */}
-                  <div className="mt-3">
-                    <div className="text-sm text-zinc-600">Пункты выдачи:</div>
-
-                    <ul className="mt-2 space-y-2">
-                      {s.pickupPoints.map((p) => (
-                        <li key={p.id} className="rounded-xl border bg-white p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <div className="font-medium">{p.name}</div>
-                              <div className="mt-1 text-sm text-zinc-600">
-                                {p.address}
+                      {/* Pickup points list */}
+                      {s.pickupPoints.length > 0 && (
+                        <ul className="space-y-2">
+                          {s.pickupPoints.map((p) => (
+                            <li
+                              key={p.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5"
+                            >
+                              <div>
+                                <div className="font-medium text-zinc-800 text-sm">
+                                  {p.name}
+                                </div>
+                                {p.address && (
+                                  <div className="text-xs text-zinc-500 mt-0.5">{p.address}</div>
+                                )}
+                                {p.hasFreezer && (
+                                  <span className="text-xs text-sky-600">🧊 есть морозилка</span>
+                                )}
                               </div>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-zinc-500">
-                                {p.hasFreezer ? "есть морозилка" : "без морозилки"}
-                              </span>
-
-                              {/* Удаление пункта — в Client Component (confirm) */}
                               <DeletePickupPointButton
                                 pickupPointId={p.id}
                                 action={deletePickupPoint}
                               />
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
+              )}
+            </CardBody>
+          </Card>
         ))}
       </div>
     </main>

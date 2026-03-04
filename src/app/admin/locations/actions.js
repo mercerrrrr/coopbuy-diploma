@@ -1,26 +1,12 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { str, bool, prismaNiceError } from "@/lib/formUtils";
 import { revalidatePath } from "next/cache";
-
-function str(formData, key) {
-  return String(formData.get(key) ?? "").trim();
-}
-
-function bool(formData, key) {
-  const v = formData.get(key);
-  return v === "on" || v === "true" || v === "1";
-}
-
-function prismaNiceError(e) {
-  const code = e?.code;
-
-  if (code === "P2002") return "Уже существует запись с таким значением (уникальность).";
-  if (code === "P2003") return "Нельзя удалить: есть связанные записи.";
-  return "Ошибка базы данных. Подробности в терминале.";
-}
+import { assertAdmin } from "@/lib/guards";
 
 export async function createRegion(_prev, formData) {
+  await assertAdmin();
   const name = str(formData, "name");
   if (!name) return { ok: false, message: "Название региона не может быть пустым." };
 
@@ -35,6 +21,7 @@ export async function createRegion(_prev, formData) {
 }
 
 export async function deleteRegion(formData) {
+  await assertAdmin();
   const id = str(formData, "id");
   if (!id) throw new Error("Не передан id региона.");
 
@@ -43,11 +30,12 @@ export async function deleteRegion(formData) {
     revalidatePath("/admin/locations");
   } catch (e) {
     console.error(e);
-    throw new Error("Нельзя удалить регион, пока в нём есть населённые пункты.");
+    throw new Error(prismaNiceError(e));
   }
 }
 
 export async function createSettlement(_prev, formData) {
+  await assertAdmin();
   const regionId = str(formData, "regionId");
   const name = str(formData, "name");
   if (!regionId) return { ok: false, message: "Не передан regionId." };
@@ -64,6 +52,7 @@ export async function createSettlement(_prev, formData) {
 }
 
 export async function deleteSettlement(formData) {
+  await assertAdmin();
   const id = str(formData, "id");
   if (!id) throw new Error("Не передан id населённого пункта.");
 
@@ -72,11 +61,12 @@ export async function deleteSettlement(formData) {
     revalidatePath("/admin/locations");
   } catch (e) {
     console.error(e);
-    throw new Error("Нельзя удалить населённый пункт, пока в нём есть пункты выдачи/зоны поставщиков.");
+    throw new Error(prismaNiceError(e));
   }
 }
 
 export async function createPickupPoint(_prev, formData) {
+  await assertAdmin();
   const settlementId = str(formData, "settlementId");
   const name = str(formData, "name");
   const address = str(formData, "address");
@@ -99,6 +89,7 @@ export async function createPickupPoint(_prev, formData) {
 }
 
 export async function deletePickupPoint(formData) {
+  await assertAdmin();
   const id = str(formData, "id");
   if (!id) throw new Error("Не передан id пункта выдачи.");
 

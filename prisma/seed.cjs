@@ -2,6 +2,7 @@ require("dotenv/config");
 
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
+const bcrypt = require("bcryptjs");
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -65,13 +66,60 @@ async function main() {
     create: { supplierId: supplier.id, settlementId: settlement.id },
   });
 
+  // Seed ADMIN user
+  await prisma.user.upsert({
+    where: { email: "admin@local.test" },
+    update: {},
+    create: {
+      email: "admin@local.test",
+      passwordHash: await bcrypt.hash("Admin123!", 10),
+      fullName: "Администратор",
+      role: "ADMIN",
+    },
+  });
+
+  // Seed OPERATOR user (linked to first available pickup point)
+  const pp = await prisma.pickupPoint.findFirst();
+  if (pp) {
+    await prisma.user.upsert({
+      where: { email: "operator1@local.test" },
+      update: {},
+      create: {
+        email: "operator1@local.test",
+        passwordHash: await bcrypt.hash("Operator123!", 10),
+        fullName: "Оператор Один",
+        role: "OPERATOR",
+        pickupPointId: pp.id,
+      },
+    });
+  }
+
+  // Upsert Category dictionary entries
+  const catKrupy = await prisma.category.upsert({
+    where: { name: "Крупы" },
+    update: {},
+    create: { name: "Крупы" },
+  });
+  const catHoz = await prisma.category.upsert({
+    where: { name: "Хозтовары" },
+    update: {},
+    create: { name: "Хозтовары" },
+  });
+
+  // Upsert Unit dictionary entry
+  const unitSht = await prisma.unit.upsert({
+    where: { name: "шт" },
+    update: {},
+    create: { name: "шт" },
+  });
+
   await prisma.product.deleteMany({ where: { supplierId: supplier.id } });
 
   await prisma.product.createMany({
     data: [
-      { supplierId: supplier.id, name: "Гречка 800г", category: "Крупы", unit: "шт", price: 120 },
-      { supplierId: supplier.id, name: "Рис 900г", category: "Крупы", unit: "шт", price: 110 },
-      { supplierId: supplier.id, name: "Порошок 3кг", category: "Хозтовары", unit: "шт", price: 450 },
+      { supplierId: supplier.id, name: "Гречка 800г", categoryId: catKrupy.id, unitId: unitSht.id, price: 120 },
+      { supplierId: supplier.id, name: "Рис 900г",    categoryId: catKrupy.id, unitId: unitSht.id, price: 110 },
+      { supplierId: supplier.id, name: "Порошок 3кг", categoryId: catHoz.id,   unitId: unitSht.id, price: 450 },
     ],
   });
 }

@@ -5,5 +5,36 @@ html, body {
 }
 
 body {
-  background: #fafafa;
+  background: #f8f8f7;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Smooth page transitions */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Better scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
+/* Animated progress bar */
+@keyframes progress-fill {
+  from { width: 0%; }
+}
+
+.animate-progress {
+  animation: progress-fill 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

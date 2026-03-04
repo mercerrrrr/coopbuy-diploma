@@ -19,6 +19,91 @@ enum OrderStatus {
   CANCELED
 }
 
+enum ReceivingStatus {
+  DRAFT
+  FINAL
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  RESIDENT
+}
+
+enum ActorType {
+  ADMIN
+  PUBLIC
+}
+
+enum AuditAction {
+  CREATE_PROCUREMENT
+  CLOSE_PROCUREMENT
+  SUBMIT_ORDER
+  CREATE_RECEIVING
+  UPDATE_RECEIVING_LINE
+  FINALIZE_RECEIVING
+  EXPORT_DOC
+  CREATE_PICKUP_SESSION
+  CHECKIN_ORDER
+  CLOSE_PICKUP_SESSION
+  IMPORT_PRICE_LIST
+  IMPORT_PRICE_LIST_DRAFT
+  APPLY_PRICE_LIST
+  UPDATE_DELIVERY_SETTINGS
+  RECALC_DELIVERY_SHARES
+  UPDATE_PAYMENT_STATUS
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+}
+
+enum EntityType {
+  PROCUREMENT
+  ORDER
+  RECEIVING
+  PICKUP_SESSION
+  SUPPLIER
+  PRICE_IMPORT_BATCH
+  USER
+}
+
+enum PickupSessionStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+enum ImportBatchStatus {
+  DRAFT
+  APPLIED
+}
+
+enum ImportRowStatus {
+  OK
+  ERROR
+}
+
+enum DeliverySplitMode {
+  PROPORTIONAL_SUM
+  EQUAL
+  PER_ITEM
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PAY_ON_PICKUP
+}
+
+enum NotificationType {
+  PROCUREMENT_CREATED
+  PROCUREMENT_CLOSED
+  PICKUP_WINDOW_UPDATED
+  ORDER_SUBMITTED
+  PAYMENT_STATUS_CHANGED
+  ORDER_ISSUED
+}
+
 model Region {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -36,12 +121,10 @@ model Settlement {
   region   Region @relation(fields: [regionId], references: [id], onDelete: Cascade)
 
   pickupPoints PickupPoint[]
+  users        User[]
 
-  // ✅ обратная связь для SupplierDeliveryZone
   supplierZones SupplierDeliveryZone[]
-
-  // ✅ обратная связь для Procurement
-  procurements Procurement[]
+  procurements  Procurement[]
 
   @@unique([regionId, name])
 }
@@ -56,8 +139,24 @@ model PickupPoint {
   settlementId String
   settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
 
-  // ✅ обратная связь для Procurement
   procurements Procurement[]
+  operators    User[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  products Product[]
+}
+
+model Unit {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  products Product[]
 }
 
 model Supplier {
@@ -69,11 +168,10 @@ model Supplier {
   email       String?
   isActive    Boolean  @default(true)
 
-  zones    SupplierDeliveryZone[]
-  products Product[]
-
-  // ✅ обратная связь для Procurement
-  procurements Procurement[]
+  zones         SupplierDeliveryZone[]
+  products      Product[]
+  procurements  Procurement[]
+  importBatches PriceImportBatch[]
 }
 
 model SupplierDeliveryZone {
@@ -94,18 +192,51 @@ model Product {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   name      String
-  category  String
-  unit      String
-  sku       String?
-  imageUrl  String?
-  price     Int
-  isActive  Boolean  @default(true)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id])
+
+  sku      String?
+  imageUrl String?
+  price    Int
+  isActive Boolean @default(true)
 
   supplierId String
   supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
-  // ✅ обратная связь для OrderItem
-  orderItems OrderItem[]
+  orderItems     OrderItem[]
+  receivingLines ReceivingLine[]
+}
+
+model PriceImportBatch {
+  id              String            @id @default(cuid())
+  createdAt       DateTime          @default(now())
+  supplierId      String
+  supplier        Supplier          @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  fileName        String
+  delimiter       String            @default(",")
+  status          ImportBatchStatus @default(DRAFT)
+  createdByUserId String?
+
+  rows PriceImportRow[]
+}
+
+model PriceImportRow {
+  id           String           @id @default(cuid())
+  batchId      String
+  batch        PriceImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber    Int
+  rawName      String
+  rawCategory  String
+  rawUnit      String
+  rawPrice     String
+  rawSku       String?
+  rawImageUrl  String?
+  status       ImportRowStatus  @default(OK)
+  errorMessage String?
 }
 
 model Procurement {
@@ -119,6 +250,10 @@ model Procurement {
   deadlineAt  DateTime
   minTotalSum Int               @default(0)
 
+  pickupWindowStart  DateTime?
+  pickupWindowEnd    DateTime?
+  pickupInstructions String?
+
   supplierId String
   supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
 
@@ -128,7 +263,12 @@ model Procurement {
   pickupPointId String
   pickupPoint   PickupPoint @relation(fields: [pickupPointId], references: [id], onDelete: Restrict)
 
-  orders Order[]
+  deliveryFee       Int               @default(0)
+  deliverySplitMode DeliverySplitMode @default(PROPORTIONAL_SUM)
+
+  orders          Order[]
+  receivingReport ReceivingReport?
+  pickupSession   PickupSession?
 }
 
 model Order {
@@ -138,14 +278,28 @@ model Order {
 
   status OrderStatus @default(DRAFT)
 
-  // MVP: без auth — гостевой заказ
+  guestId String?
+  userId  String?
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   participantName  String?
   participantPhone String?
 
   procurementId String
   procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
 
-  items OrderItem[]
+  goodsTotal    Int?
+  deliveryShare Int?
+  grandTotal    Int?
+  paymentStatus PaymentStatus @default(UNPAID)
+  paidAt        DateTime?
+  paymentMethod String?
+
+  items   OrderItem[]
+  checkin PickupCheckin?
+
+  @@index([procurementId, guestId])
+  @@index([procurementId, userId])
 }
 
 model OrderItem {
@@ -160,4 +314,107 @@ model OrderItem {
 
   qty   Int
   price Int
+}
+
+model ReceivingReport {
+  id        String          @id @default(cuid())
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  status    ReceivingStatus @default(DRAFT)
+  notes     String?
+
+  procurementId String      @unique
+  procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+
+  lines ReceivingLine[]
+}
+
+model ReceivingLine {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reportId String
+  report   ReceivingReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  expectedQty Int
+  receivedQty Int
+  comment     String?
+}
+
+model User {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         UserRole @default(RESIDENT)
+
+  settlementId  String?
+  settlement    Settlement?  @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  pickupPointId String?
+  pickupPoint   PickupPoint? @relation(fields: [pickupPointId], references: [id], onDelete: SetNull)
+
+  orders        Order[]
+  notifications Notification[]
+}
+
+model PickupSession {
+  id        String              @id @default(cuid())
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  status    PickupSessionStatus @default(PLANNED)
+  startAt   DateTime?
+  endAt     DateTime?
+
+  procurementId String      @unique
+  procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+
+  checkins PickupCheckin[]
+}
+
+model PickupCheckin {
+  id        String   @id @default(cuid())
+  checkedAt DateTime @default(now())
+  note      String?
+
+  sessionId String
+  session   PickupSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  operatorUserId String?
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  createdAt  DateTime    @default(now())
+  actorType  ActorType
+  actorLabel String
+  action     AuditAction
+  entityType EntityType
+  entityId   String
+  meta       Json?
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  createdAt DateTime         @default(now())
+  readAt    DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    NotificationType
+  title   String
+  body    String
+  linkUrl String?
+
+  @@index([userId, createdAt])
 }

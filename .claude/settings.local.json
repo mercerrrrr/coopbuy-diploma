@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr list:*)",
+      "Bash(npx prisma format)",
+      "Bash(npx prisma generate)",
+      "Bash(npm run test:run)",
+      "Bash(npm run build)"
+    ]
+  }
+}

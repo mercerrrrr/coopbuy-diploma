@@ -30,12 +30,22 @@ function SubmitButton({ children }) {
  * suppliers: [{id, name, minOrderSum}]
  * settlements: [{id, label}]
  * pickupPoints: [{id, label, settlementId}]
+ * operatorPickupPointId / operatorSettlementId: lock fields for OPERATOR role
  */
-export function CreateProcurementForm({ action, suppliers, settlements, pickupPoints }) {
+export function CreateProcurementForm({
+  action,
+  suppliers,
+  settlements,
+  pickupPoints,
+  operatorPickupPointId,
+  operatorSettlementId,
+}) {
   const [state, formAction] = useActionState(action, null);
 
   const [supplierId, setSupplierId] = useState("");
-  const [settlementId, setSettlementId] = useState("");
+  const [settlementId, setSettlementId] = useState(operatorSettlementId ?? "");
+
+  const isOperator = Boolean(operatorPickupPointId);
 
   const supplierMinSum = useMemo(() => {
     const s = suppliers.find((x) => x.id === supplierId);
@@ -45,6 +55,16 @@ export function CreateProcurementForm({ action, suppliers, settlements, pickupPo
   const filteredPickupPoints = useMemo(() => {
     return pickupPoints.filter((p) => p.settlementId === settlementId);
   }, [pickupPoints, settlementId]);
+
+  const operatorPickupLabel = useMemo(() => {
+    if (!isOperator) return null;
+    return pickupPoints.find((p) => p.id === operatorPickupPointId)?.label ?? operatorPickupPointId;
+  }, [isOperator, operatorPickupPointId, pickupPoints]);
+
+  const operatorSettlementLabel = useMemo(() => {
+    if (!isOperator) return null;
+    return settlements.find((s) => s.id === operatorSettlementId)?.label ?? operatorSettlementId;
+  }, [isOperator, operatorSettlementId, settlements]);
 
   return (
     <div>
@@ -71,36 +91,56 @@ export function CreateProcurementForm({ action, suppliers, settlements, pickupPo
           ))}
         </select>
 
-        <select
-          name="settlementId"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-          value={settlementId}
-          onChange={(e) => setSettlementId(e.target.value)}
-        >
-          <option value="" disabled>
-            Населённый пункт…
-          </option>
-          {settlements.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
+        {/* Settlement — locked for OPERATOR */}
+        {isOperator ? (
+          <>
+            <input type="hidden" name="settlementId" value={operatorSettlementId} />
+            <div className="rounded-xl border bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
+              {operatorSettlementLabel}
+            </div>
+          </>
+        ) : (
+          <select
+            name="settlementId"
+            className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+            value={settlementId}
+            onChange={(e) => setSettlementId(e.target.value)}
+          >
+            <option value="" disabled>
+              Населённый пункт…
             </option>
-          ))}
-        </select>
+            {settlements.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        )}
 
-        <select
-          name="pickupPointId"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-          defaultValue=""
-        >
-          <option value="" disabled>
-            Пункт выдачи…
-          </option>
-          {filteredPickupPoints.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
+        {/* Pickup point — locked for OPERATOR */}
+        {isOperator ? (
+          <>
+            <input type="hidden" name="pickupPointId" value={operatorPickupPointId} />
+            <div className="rounded-xl border bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
+              {operatorPickupLabel}
+            </div>
+          </>
+        ) : (
+          <select
+            name="pickupPointId"
+            className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+            defaultValue=""
+          >
+            <option value="" disabled>
+              Пункт выдачи…
             </option>
-          ))}
-        </select>
+            {filteredPickupPoints.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           name="deadlineAt"
@@ -114,6 +154,29 @@ export function CreateProcurementForm({ action, suppliers, settlements, pickupPo
           placeholder="Мин. общий сбор (например: 10000)"
           className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
         />
+
+        {/* Pickup window — optional */}
+        <div className="md:col-span-2 border-t pt-3">
+          <div className="text-xs text-zinc-500 mb-2">Окно выдачи (необязательно)</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <input
+              name="pickupWindowStart"
+              type="datetime-local"
+              className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+            />
+            <input
+              name="pickupWindowEnd"
+              type="datetime-local"
+              className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+            />
+            <textarea
+              name="pickupInstructions"
+              placeholder="Инструкции для участников (например: прийти с 18:00 до 20:00, взять паспорт)"
+              rows={2}
+              className="md:col-span-2 rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 resize-none"
+            />
+          </div>
+        </div>
 
         <div className="md:col-span-2">
           <SubmitButton>Создать закупку</SubmitButton>
