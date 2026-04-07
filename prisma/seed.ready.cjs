@@ -1,6 +1,8 @@
 /**
- * prisma/seed.ready.cjs — Ready dataset (small but complete scenario)
- * Idempotent via upsert.  Run: node prisma/seed.ready.cjs
+ * prisma/seed.ready.cjs — historical utility dataset.
+ * Official seed path for the project is `prisma/seed.js`.
+ * Official fill scenario is `npm run db:reset`.
+ * Idempotent via upsert. Run manually only when you intentionally need this legacy scenario.
  */
 require("dotenv/config");
 
@@ -424,6 +426,7 @@ async function main() {
   const existingReport = await prisma.receivingReport.findFirst({
     where: { procurementId: closedProc.id },
   });
+  let receivingReportId = existingReport?.id ?? null;
   if (!existingReport) {
     const report = await prisma.receivingReport.create({
       data: {
@@ -432,6 +435,7 @@ async function main() {
         notes: "Приёмка завершена. Выявлены незначительные расхождения по гречке.",
       },
     });
+    receivingReportId = report.id;
     await prisma.receivingLine.createMany({
       data: [
         {
@@ -520,20 +524,20 @@ async function main() {
       { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "CLOSE_PROCUREMENT",  entityType: "PROCUREMENT", entityId: procurements[2].id, meta: {} },
       { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "UPDATE_DELIVERY_SETTINGS", entityType: "PROCUREMENT", entityId: procurements[0].id, meta: { deliveryFee: 1200, mode: "PROPORTIONAL_SUM" } },
       { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "RECALC_DELIVERY_SHARES",   entityType: "PROCUREMENT", entityId: procurements[0].id, meta: {} },
-      { actorType: "PUBLIC", actorLabel: "user1@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: {} },
-      { actorType: "PUBLIC", actorLabel: "user2@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[1]?.id ?? "n/a", meta: {} },
-      { actorType: "PUBLIC", actorLabel: "guest",              action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[2]?.id ?? "n/a", meta: {} },
-      { actorType: "PUBLIC", actorLabel: "user1@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[3]?.id ?? "n/a", meta: {} },
-      { actorType: "PUBLIC", actorLabel: "user2@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[4]?.id ?? "n/a", meta: {} },
-      { actorType: "PUBLIC", actorLabel: "user1@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[5]?.id ?? "n/a", meta: {} },
+      { actorType: "PUBLIC", actorLabel: "user1@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: { procurementId: procurements[0].id } },
+      { actorType: "PUBLIC", actorLabel: "user2@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[1]?.id ?? "n/a", meta: { procurementId: procurements[0].id } },
+      { actorType: "PUBLIC", actorLabel: "guest",              action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[2]?.id ?? "n/a", meta: { procurementId: procurements[0].id } },
+      { actorType: "PUBLIC", actorLabel: "user1@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[3]?.id ?? "n/a", meta: { procurementId: procurements[1].id } },
+      { actorType: "PUBLIC", actorLabel: "user2@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[4]?.id ?? "n/a", meta: { procurementId: procurements[1].id } },
+      { actorType: "PUBLIC", actorLabel: "user1@local.test",   action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[5]?.id ?? "n/a", meta: { procurementId: procurements[2].id } },
       { actorType: "ADMIN", actorLabel: "operator1@local.test",action: "CREATE_PICKUP_SESSION", entityType: "PROCUREMENT", entityId: closedProc.id, meta: { sessionId: session.id } },
-      { actorType: "ADMIN", actorLabel: "operator1@local.test",action: "CHECKIN_ORDER",      entityType: "ORDER",       entityId: orders[5]?.id ?? "n/a", meta: {} },
-      { actorType: "ADMIN", actorLabel: "operator1@local.test",action: "CHECKIN_ORDER",      entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: {} },
+      { actorType: "ADMIN", actorLabel: "operator1@local.test",action: "CHECKIN_ORDER",      entityType: "PROCUREMENT", entityId: closedProc.id, meta: { orderId: orders[5]?.id ?? "n/a" } },
+      { actorType: "ADMIN", actorLabel: "operator1@local.test",action: "CHECKIN_ORDER",      entityType: "PROCUREMENT", entityId: procurements[0].id, meta: { orderId: orders[0]?.id ?? "n/a" } },
       { actorType: "ADMIN", actorLabel: "operator1@local.test",action: "CLOSE_PICKUP_SESSION", entityType: "PROCUREMENT", entityId: closedProc.id, meta: {} },
-      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",   entityId: orders[0]?.id ?? "n/a", meta: { paymentStatus: "PAID" } },
-      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",   entityId: orders[3]?.id ?? "n/a", meta: { paymentStatus: "PAID" } },
-      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "CREATE_RECEIVING",   entityType: "RECEIVING",   entityId: closedProc.id, meta: {} },
-      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "FINALIZE_RECEIVING", entityType: "RECEIVING",   entityId: closedProc.id, meta: {} },
+      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",   entityId: orders[0]?.id ?? "n/a", meta: { procurementId: procurements[0].id, paymentStatus: "PAID" } },
+      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",   entityId: orders[3]?.id ?? "n/a", meta: { procurementId: procurements[1].id, paymentStatus: "PAID" } },
+      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "CREATE_RECEIVING",   entityType: "PROCUREMENT", entityId: closedProc.id, meta: { reportId: receivingReportId } },
+      { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "FINALIZE_RECEIVING", entityType: "PROCUREMENT", entityId: closedProc.id, meta: { reportId: receivingReportId } },
       { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "EXPORT_DOC",         entityType: "PROCUREMENT", entityId: procurements[2].id, meta: { type: "payments_xlsx" } },
       { actorType: "ADMIN", actorLabel: "admin@local.test",    action: "EXPORT_DOC",         entityType: "PROCUREMENT", entityId: procurements[2].id, meta: { type: "report_xlsx" } },
     ];

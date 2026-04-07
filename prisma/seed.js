@@ -1,6 +1,7 @@
 /**
  * prisma/seed.js — главный seed проекта CoopBuy.
- * Идемпотентен (upsert/findFirst). Запуск: node prisma/seed.js
+ * Официальный seed path проекта: prisma/seed.js
+ * Официальный сценарий наполнения БД: npm run db:reset
  */
 require("dotenv/config");
 
@@ -15,19 +16,18 @@ const hash = (pw) => bcrypt.hash(pw, 10);
 const days = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d; };
 
 async function main() {
-  // ── 1. Регионы (3) ────────────────────────────────────────────────────────
-  const regionNames = ["Краснодарский край", "Ростовская область", "Астраханская область"];
+  // ── 1. Пилотный регион (1) ────────────────────────────────────────────────
+  const regionNames = ["Астраханская область"];
   const regions = [];
   for (const name of regionNames) {
     regions.push(await prisma.region.upsert({ where: { name }, update: {}, create: { name } }));
   }
 
-  // ── 2. Населённые пункты (4) ──────────────────────────────────────────────
+  // ── 2. Населённые пункты пилота (3 внутри одного региона) ────────────────
   const settlementDefs = [
-    { name: "Солнечное",   regionIdx: 0 },
+    { name: "Солнечное", regionIdx: 0 },
     { name: "Новый Берег", regionIdx: 0 },
-    { name: "Заречный",    regionIdx: 1 },
-    { name: "Камыши",      regionIdx: 2 },
+    { name: "Заречный", regionIdx: 0 },
   ];
   const settlements = [];
   for (const s of settlementDefs) {
@@ -41,12 +41,11 @@ async function main() {
     );
   }
 
-  // ── 3. Пункты выдачи (4) ─────────────────────────────────────────────────
+  // ── 3. Пункты выдачи пилота (по одному на settlement) ────────────────────
   const ppDefs = [
-    { name: "ПВЗ Центральный", address: "ул. Центральная, 1",  hasFreezer: false, sIdx: 0 },
-    { name: "ПВЗ Северный",    address: "пр. Северный, 12",    hasFreezer: false, sIdx: 1 },
-    { name: "ПВЗ Холодный",    address: "ул. Ледовая, 5",      hasFreezer: true,  sIdx: 2 },
-    { name: "ПВЗ Восточный",   address: "ул. Восточная, 7",    hasFreezer: false, sIdx: 3 },
+    { name: "ПВЗ Центральный", address: "ул. Центральная, 1", hasFreezer: false, sIdx: 0 },
+    { name: "ПВЗ Северный", address: "пр. Северный, 12", hasFreezer: false, sIdx: 1 },
+    { name: "ПВЗ Холодный", address: "ул. Ледовая, 5", hasFreezer: true, sIdx: 2 },
   ];
   const pickupPoints = [];
   for (const d of ppDefs) {
@@ -88,9 +87,9 @@ async function main() {
     suppliers.push(s);
   }
 
-  // ── 7. Зоны доставки (2 активных поставщика × 2 НП) ─────────────────────
+  // ── 7. Зоны доставки (2 активных поставщика × все settlement пилота) ────
   for (const supIdx of [0, 1]) {
-    for (const sIdx of [0, 1]) {
+    for (const sIdx of [0, 1, 2]) {
       await prisma.supplierDeliveryZone.upsert({
         where: { supplierId_settlementId: { supplierId: suppliers[supIdx].id, settlementId: settlements[sIdx].id } },
         update: { isActive: true },
@@ -193,6 +192,45 @@ async function main() {
     },
   });
 
+  const user3 = await prisma.user.upsert({
+    where: { email: "user3@local.test" },
+    update: {},
+    create: {
+      email: "user3@local.test",
+      passwordHash: await hash("User123!"),
+      fullName: "Алексей Смирнов",
+      phone: "+7(900)200-00-03",
+      role: "RESIDENT",
+      settlementId: settlements[1].id,
+    },
+  });
+
+  const user4 = await prisma.user.upsert({
+    where: { email: "user4@local.test" },
+    update: {},
+    create: {
+      email: "user4@local.test",
+      passwordHash: await hash("User123!"),
+      fullName: "Елена Кузнецова",
+      phone: "+7(900)200-00-04",
+      role: "RESIDENT",
+      settlementId: settlements[1].id,
+    },
+  });
+
+  const user5 = await prisma.user.upsert({
+    where: { email: "user5@local.test" },
+    update: {},
+    create: {
+      email: "user5@local.test",
+      passwordHash: await hash("User123!"),
+      fullName: "Сергей Павлов",
+      phone: "+7(900)200-00-05",
+      role: "RESIDENT",
+      settlementId: settlements[0].id,
+    },
+  });
+
   // ── 10. Закупки (3: 2 OPEN, 1 CLOSED) ────────────────────────────────────
   const procDefs = [
     {
@@ -259,9 +297,9 @@ async function main() {
   const orderDefs = [
     { proc: 0, user: user1, items: [[0,2],[4,1],[8,1]], paymentStatus: "PAID",         paidAt: new Date("2026-02-20"), paymentMethod: "Перевод" },
     { proc: 0, user: user2, items: [[1,1],[5,2]],        paymentStatus: "PAY_ON_PICKUP" },
-    { proc: 0, user: null,  guestName: "Гость Семёнов",  guestPhone: "+7(900)300-00-03", items: [[2,3],[9,2]], paymentStatus: "UNPAID" },
-    { proc: 1, user: user1, items: [[10,2],[11,1],[12,1]], paymentStatus: "PAID",       paidAt: new Date("2026-02-22"), paymentMethod: "Наличные" },
-    { proc: 1, user: user2, items: [[13,2],[14,3]],       paymentStatus: "UNPAID" },
+    { proc: 0, user: user5, items: [[2,3],[9,2]],        paymentStatus: "UNPAID" },
+    { proc: 1, user: user3, items: [[10,2],[11,1],[12,1]], paymentStatus: "PAID",       paidAt: new Date("2026-02-22"), paymentMethod: "Наличные" },
+    { proc: 1, user: user4, items: [[13,2],[14,3]],       paymentStatus: "UNPAID" },
     { proc: 2, user: user1, items: [[0,2],[4,1]],         paymentStatus: "PAID",       paidAt: new Date("2026-01-22"), paymentMethod: "Перевод" },
   ];
 
@@ -276,13 +314,11 @@ async function main() {
     const orderCountForProc = orderDefs.filter((x) => x.proc === d.proc).length;
     const deliveryShare = Math.round(fee / orderCountForProc);
     const grandTotal = goodsTotal + deliveryShare;
-    const userId = d.user?.id ?? null;
-    const participantName = d.user?.fullName ?? d.guestName ?? null;
-    const participantPhone = d.user?.phone ?? d.guestPhone ?? null;
+    const userId = d.user.id;
+    const participantName = d.user.fullName;
+    const participantPhone = d.user.phone ?? null;
 
-    const where = userId
-      ? { procurementId: proc.id, userId, status: "SUBMITTED" }
-      : { procurementId: proc.id, participantName, status: "SUBMITTED" };
+    const where = { procurementId: proc.id, userId, status: "SUBMITTED" };
     const existing = await prisma.order.findFirst({ where });
     if (existing) { orders.push(existing); continue; }
 
@@ -343,17 +379,21 @@ async function main() {
   }
 
   // ── 13. ReceivingReport для CLOSED proc ──────────────────────────────────
+  let receivingReportId = null;
   const existingReport = await prisma.receivingReport.findFirst({ where: { procurementId: closedProc.id } });
   if (!existingReport) {
     const report = await prisma.receivingReport.create({
       data: { procurementId: closedProc.id, status: "FINAL", notes: "Приёмка завершена. Небольшое расхождение по гречке." },
     });
+    receivingReportId = report.id;
     await prisma.receivingLine.createMany({
       data: [
         { reportId: report.id, productId: products[0].id, expectedQty: 10, receivedQty: 9, comment: "1 уп. повреждена" },
         { reportId: report.id, productId: products[4].id, expectedQty: 5,  receivedQty: 5, comment: null },
       ],
     });
+  } else {
+    receivingReportId = existingReport.id;
   }
 
   // ── 14. Уведомления ───────────────────────────────────────────────────────
@@ -391,21 +431,24 @@ async function main() {
         { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "CREATE_PROCUREMENT",    entityType: "PROCUREMENT", entityId: procurements[2].id, meta: { title: procurements[2].title } },
         { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "CLOSE_PROCUREMENT",     entityType: "PROCUREMENT", entityId: procurements[2].id, meta: {} },
         { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "UPDATE_DELIVERY_SETTINGS", entityType: "PROCUREMENT", entityId: procurements[0].id, meta: { deliveryFee: 1200 } },
-        { actorType: "PUBLIC", actorLabel: "user1@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: {} },
-        { actorType: "PUBLIC", actorLabel: "user2@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[1]?.id ?? "n/a", meta: {} },
-        { actorType: "PUBLIC", actorLabel: "guest",                action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[2]?.id ?? "n/a", meta: {} },
-        { actorType: "PUBLIC", actorLabel: "user1@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[3]?.id ?? "n/a", meta: {} },
-        { actorType: "ADMIN",  actorLabel: "operator1@local.test", action: "CHECKIN_ORDER",         entityType: "ORDER",       entityId: orders[5]?.id ?? "n/a", meta: {} },
+        { actorType: "PUBLIC", actorLabel: "user1@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: { procurementId: procurements[0].id } },
+        { actorType: "PUBLIC", actorLabel: "user2@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[1]?.id ?? "n/a", meta: { procurementId: procurements[0].id } },
+        { actorType: "PUBLIC", actorLabel: "user5@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[2]?.id ?? "n/a", meta: { procurementId: procurements[0].id } },
+        { actorType: "PUBLIC", actorLabel: "user3@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[3]?.id ?? "n/a", meta: { procurementId: procurements[1].id } },
+        { actorType: "PUBLIC", actorLabel: "user4@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[4]?.id ?? "n/a", meta: { procurementId: procurements[1].id } },
+        { actorType: "PUBLIC", actorLabel: "user1@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[5]?.id ?? "n/a", meta: { procurementId: procurements[2].id } },
+        { actorType: "ADMIN",  actorLabel: "operator1@local.test", action: "CHECKIN_ORDER",         entityType: "PROCUREMENT", entityId: closedProc.id,           meta: { orderId: orders[5]?.id ?? "n/a" } },
         { actorType: "ADMIN",  actorLabel: "operator1@local.test", action: "CLOSE_PICKUP_SESSION",  entityType: "PROCUREMENT", entityId: closedProc.id,           meta: {} },
-        { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: { paymentStatus: "PAID" } },
-        { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "FINALIZE_RECEIVING",    entityType: "RECEIVING",   entityId: closedProc.id,           meta: {} },
+        { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: { procurementId: procurements[0].id, paymentStatus: "PAID" } },
+        { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "CREATE_RECEIVING",      entityType: "PROCUREMENT", entityId: closedProc.id,           meta: { reportId: receivingReportId } },
+        { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "FINALIZE_RECEIVING",    entityType: "PROCUREMENT", entityId: closedProc.id,           meta: { reportId: receivingReportId } },
       ],
     });
   }
 
   // ── Итог ──────────────────────────────────────────────────────────────────
   console.log("\n✅ Seed выполнен:");
-  console.log(`  регионы:      ${regions.length}`);
+  console.log(`  регионы:      ${regions.length} (пилотный контур)`);
   console.log(`  НП:           ${settlements.length}`);
   console.log(`  ПВЗ:          ${pickupPoints.length}`);
   console.log(`  категории:    ${cats.length}`);
@@ -420,7 +463,9 @@ async function main() {
   console.log("  ADMIN:    admin@local.test     / Admin123!");
   console.log("  OPERATOR: operator1@local.test / Operator123!");
   console.log("  RESIDENT: user1@local.test     / User123!");
-  console.log("  RESIDENT: user2@local.test     / User123!\n");
+  console.log("  RESIDENT: user2@local.test     / User123!");
+  console.log("  RESIDENT: user3@local.test     / User123!");
+  console.log("  RESIDENT: user4@local.test     / User123!\n");
 }
 
 main()

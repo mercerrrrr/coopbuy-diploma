@@ -1,9 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
+
+function PendingButton({ children, pendingText = "Сохраняем...", className = "" }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={`${className} disabled:opacity-60`}
+    >
+      {pending ? pendingText : children}
+    </button>
+  );
+}
 
 /** Confirm button — shows native confirm dialog before submitting the form */
-export function ConfirmForm({ action, hiddenFields, label, confirmText, buttonClass }) {
+export function ConfirmForm({
+  action,
+  hiddenFields,
+  label,
+  confirmText,
+  buttonClass,
+  pendingLabel = "Сохраняем...",
+}) {
   function handleSubmit(e) {
     if (!confirm(confirmText)) e.preventDefault();
   }
@@ -12,9 +33,9 @@ export function ConfirmForm({ action, hiddenFields, label, confirmText, buttonCl
       {Object.entries(hiddenFields).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
-      <button type="submit" className={buttonClass}>
+      <PendingButton pendingText={pendingLabel} className={buttonClass}>
         {label}
-      </button>
+      </PendingButton>
     </form>
   );
 }
@@ -55,6 +76,7 @@ export function ReceivingLineRow({ line, procurementId, updateAction, isFinal })
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Комментарий"
+            maxLength={500}
             className="w-full min-w-30 rounded-lg border bg-white px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
           />
         )}
@@ -66,12 +88,12 @@ export function ReceivingLineRow({ line, procurementId, updateAction, isFinal })
             <input type="hidden" name="procurementId" value={procurementId} />
             <input type="hidden" name="receivedQty" value={receivedQty} />
             <input type="hidden" name="comment" value={comment} />
-            <button
-              type="submit"
+            <PendingButton
+              pendingText="Сохраняем..."
               className="rounded-lg border bg-zinc-900 px-2 py-1 text-xs font-medium text-white hover:bg-zinc-800"
             >
               Сохранить
-            </button>
+            </PendingButton>
           </form>
         </td>
       )}

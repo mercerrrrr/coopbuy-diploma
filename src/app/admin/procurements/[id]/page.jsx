@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getBaseUrl } from "@/lib/baseUrl";
+import { getSession } from "@/lib/auth";
+import { requireAccessibleProcurement } from "@/lib/guards";
+import { buildProcurementAuditWhere } from "@/lib/audit";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import {
   createReceivingReport,
@@ -26,49 +30,43 @@ import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { InlineMessage } from "@/components/ui/InlineMessage";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { autoCloseExpiredProcurements } from "@/lib/procurements/autoCloseExpired";
+import { getProcurementState } from "@/lib/procurements/state";
 import {
-  ChevronRight,
-  Package,
-  Truck,
-  Users,
-  ClipboardList,
-  FileSpreadsheet,
-  FileText,
-  BarChart2,
-  History,
-  HandCoins,
-} from "lucide-react";
-
-const PAYMENT_LABELS = {
-  UNPAID: "Не оплачено",
-  PAID: "Оплачено",
-  PAY_ON_PICKUP: "При выдаче",
-};
-
-const PAYMENT_VARIANTS = {
-  UNPAID: "danger",
-  PAID: "success",
-  PAY_ON_PICKUP: "info",
-};
-
-// Note: PAYMENT_LABELS/VARIANTS also duplicated in OrdersSearchTable for the search filter
+  PAYMENT_LABELS,
+  PAYMENT_VARIANTS,
+  STATUS_LABELS,
+  STATUS_VARIANTS,
+} from "@/lib/constants";
+import { getOrderTotals, getOrdersGoodsTotal } from "@/lib/orders";
 
 export default async function ProcurementDetailPage({ params }) {
   const { id } = await params;
   const baseUrl = await getBaseUrl();
 
-  const procurement = await prisma.procurement.findUnique({
-    where: { id },
-    include: {
-      supplier: true,
-      settlement: { include: { region: true } },
-      pickupPoint: true,
-    },
-  });
+  const session = await getSession();
+  if (!session || (session.role !== "ADMIN" && session.role !== "OPERATOR")) {
+    redirect("/auth/login");
+  }
+  await autoCloseExpiredProcurements(prisma);
+
+  let procurement = null;
+  try {
+    ({ procurement } = await requireAccessibleProcurement(id, {
+      include: {
+        supplier: true,
+        settlement: { include: { region: true } },
+        pickupPoint: true,
+      },
+    }));
+  } catch {
+    notFound();
+  }
 
   if (!procurement) {
     return (
-      <main className="mx-auto max-w-5xl p-6">
+      <main className="mx-auto max-w-[1500px] p-6 lg:px-8">
         <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center">
           <p className="text-sm text-zinc-500">Закупка не найдена.</p>
         </div>
@@ -78,7 +76,7 @@ export default async function ProcurementDetailPage({ params }) {
 
   const ORDERS_CAP = 300;
 
-  const [submittedOrders, totalOrdersCount, receivingReport, pickupSession, auditLogs] =
+  const [submittedOrders, totalOrdersCount, receivingReport, pickupSession] =
     await Promise.all([
       prisma.order.findMany({
         where: { procurementId: id, status: "SUBMITTED" },
@@ -103,12 +101,16 @@ export default async function ProcurementDetailPage({ params }) {
         where: { procurementId: id },
         include: { checkins: true },
       }),
-      prisma.auditLog.findMany({
-        where: { entityId: id },
-        orderBy: { createdAt: "desc" },
-        take: 30,
-      }),
     ]);
+
+  const auditLogs = await prisma.auditLog.findMany({
+    where: buildProcurementAuditWhere(
+      id,
+      submittedOrders.map((order) => order.id)
+    ),
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
 
   // Агрегация по продукту
   const aggMap = new Map();
@@ -131,10 +133,8 @@ export default async function ProcurementDetailPage({ params }) {
   }
   const aggRows = Array.from(aggMap.values()).sort((a, b) => b.totalSum - a.totalSum);
 
-  const submittedTotal = submittedOrders.reduce(
-    (sum, o) => sum + o.items.reduce((s, i) => s + i.qty * i.price, 0),
-    0
-  );
+  const submittedTotal = getOrdersGoodsTotal(submittedOrders);
+  const procurementState = getProcurementState(procurement, submittedTotal);
   const progress =
     procurement.minTotalSum > 0
       ? Math.min(100, Math.round((submittedTotal / procurement.minTotalSum) * 100))
@@ -148,31 +148,60 @@ export default async function ProcurementDetailPage({ params }) {
   const sessionClosed = pickupSession?.status === "CLOSED";
 
   return (
-    <main className="mx-auto max-w-5xl p-6 space-y-5">
-      {/* Breadcrumb + title */}
-      <div>
-        <nav className="flex items-center gap-1.5 text-xs text-zinc-400 mb-2">
-          <Link href="/admin/procurements" className="hover:text-zinc-700 transition-colors">
-            Закупки
-          </Link>
-          <ChevronRight size={12} />
-          <span className="text-zinc-600 font-medium">{procurement.title}</span>
-        </nav>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <h1 className="text-xl font-bold text-zinc-900">{procurement.title}</h1>
+    <main className="cb-shell space-y-4 py-1">
+      <div className="text-xs text-[color:var(--cb-text-faint)]">
+        <Link href="/admin/procurements" className="hover:text-[color:var(--cb-text)]">
+          Закупки
+        </Link>{" "}
+        / <span className="font-medium text-[color:var(--cb-text-soft)]">{procurement.title}</span>
+      </div>
+
+      <PageHeader
+        eyebrow="Операционный центр / карточка закупки"
+        title={procurement.title}
+        description={`${procurement.supplier.name} · ${procurement.settlement.region.name}, ${procurement.settlement.name} · ${procurement.pickupPoint.name}`}
+        actions={
           <Link
             href={`/admin/procurements/${id}/report`}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 shadow-sm transition-colors"
+            className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm font-medium text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
           >
-            <BarChart2 size={13} />
-            Отчёт
+            Отчёт по закупке
           </Link>
-        </div>
+        }
+        meta={
+          <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3">
+            <div className="cb-kicker">Собрано</div>
+            <div className="mt-1.5 text-xl font-semibold text-[color:var(--cb-text)]">
+              {submittedTotal.toLocaleString("ru-RU")} ₽
+            </div>
+            <div className="text-xs text-[color:var(--cb-text-soft)]">
+              {submittedOrders.length} подтверждённых заказов
+            </div>
+          </div>
+        }
+      />
+
+      <div className="grid gap-2 md:grid-cols-5">
+        {[
+          { href: "#overview", label: "Сводка" },
+          { href: "#payments", label: "Оплата" },
+          { href: "#pickup", label: "Выдача" },
+          { href: "#receiving", label: "Приёмка" },
+          { href: "#orders", label: "Заказы и журнал" },
+        ].map((item) => (
+          <a
+            key={item.href}
+            href={item.href}
+            className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--cb-line)] bg-white px-3 py-2 text-sm font-medium text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
+          >
+            {item.label}
+          </a>
+        ))}
       </div>
 
       {/* Warning: orders cap reached */}
       {totalOrdersCount > ORDERS_CAP && (
-        <InlineMessage variant="warning">
+        <InlineMessage type="warning">
           Показаны первые {ORDERS_CAP} заявок из {totalOrdersCount}. Для полного списка
           используйте экспорт{" "}
           <a
@@ -186,10 +215,12 @@ export default async function ProcurementDetailPage({ params }) {
       )}
 
       {/* Info card */}
-      <Card>
+      <Card id="overview">
         <CardHeader>
           <CardTitle>Информация о закупке</CardTitle>
-          <Badge variant="neutral">{procurement.status}</Badge>
+          <Badge variant={STATUS_VARIANTS[procurement.status] ?? "neutral"}>
+            {STATUS_LABELS[procurement.status] ?? procurement.status}
+          </Badge>
         </CardHeader>
         <CardBody className="grid sm:grid-cols-2 gap-x-8 gap-y-3 text-sm">
           <div>
@@ -290,23 +321,26 @@ export default async function ProcurementDetailPage({ params }) {
             Подтверждённых заявок:{" "}
             <span className="font-medium text-zinc-600">{submittedOrders.length}</span>
           </p>
+          {procurementState.closedBecauseMinNotReached && (
+            <InlineMessage type="warning" className="mt-4">
+              Минимальная сумма не достигнута: собрано {submittedTotal.toLocaleString("ru-RU")} ₽
+              из {procurement.minTotalSum.toLocaleString("ru-RU")} ₽. Закупка закрыта и
+              отображается в архиве.
+            </InlineMessage>
+          )}
         </CardBody>
       </Card>
 
       {/* Delivery & Payment */}
-      <Card>
+      <Card id="payments">
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <HandCoins size={16} className="text-zinc-400" />
-            <CardTitle>Доставка и оплата</CardTitle>
-          </div>
+          <CardTitle>Доставка и оплата</CardTitle>
           <div className="flex items-center gap-2">
             <Link
               href={`/admin/procurements/${id}/payments.xlsx`}
               className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 hover:bg-emerald-100 transition-colors"
             >
-              <FileSpreadsheet size={12} />
-              Payments XLSX
+              Реестр оплат XLSX
             </Link>
             <form action={recalcShares}>
               <input type="hidden" name="procurementId" value={id} />
@@ -351,10 +385,7 @@ export default async function ProcurementDetailPage({ params }) {
       {/* Aggregate supplier order */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Package size={16} className="text-zinc-400" />
-            <CardTitle>Агрегированный заказ поставщику</CardTitle>
-          </div>
+          <CardTitle>Агрегированный заказ поставщику</CardTitle>
           <div className="flex flex-wrap gap-2">
             <Link
               href={`/admin/procurements/${id}/export.csv`}
@@ -366,14 +397,12 @@ export default async function ProcurementDetailPage({ params }) {
               href={`/admin/procurements/${id}/export.pdf`}
               className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 transition-colors"
             >
-              <FileText size={12} />
               PDF
             </Link>
             <Link
               href={`/admin/procurements/${id}/export.xlsx`}
               className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 hover:bg-emerald-100 transition-colors"
             >
-              <FileSpreadsheet size={12} />
               XLSX
             </Link>
           </div>
@@ -436,10 +465,9 @@ export default async function ProcurementDetailPage({ params }) {
       </Card>
 
       {/* Pickup */}
-      <Card>
+      <Card id="pickup">
         <CardHeader>
           <div className="flex items-center gap-2 flex-wrap">
-            <Truck size={16} className="text-zinc-400" />
             <CardTitle>Выдача</CardTitle>
             {pickupSession && (
               <>
@@ -498,9 +526,7 @@ export default async function ProcurementDetailPage({ params }) {
               )}
               <div className="space-y-2">
                 {submittedOrders.map((order) => {
-                  const orderTotal =
-                    order.grandTotal ??
-                    order.items.reduce((s, i) => s + i.qty * i.price, 0);
+                  const { grandTotal: orderTotal } = getOrderTotals(order);
                   const isCheckedIn = Boolean(order.checkin);
                   const isUnpaid = order.paymentStatus === "UNPAID";
                   return (
@@ -557,10 +583,9 @@ export default async function ProcurementDetailPage({ params }) {
       </Card>
 
       {/* Receiving report */}
-      <Card>
+      <Card id="receiving">
         <CardHeader>
           <div className="flex items-center gap-2 flex-wrap">
-            <ClipboardList size={16} className="text-zinc-400" />
             <CardTitle>Приёмка поставки</CardTitle>
             {receivingReport && (
               <>
@@ -587,7 +612,6 @@ export default async function ProcurementDetailPage({ params }) {
                 href={`/admin/procurements/${id}/receiving.xlsx`}
                 className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 hover:bg-emerald-100 transition-colors"
               >
-                <FileSpreadsheet size={12} />
                 Акт XLSX
               </Link>
             )}
@@ -650,10 +674,9 @@ export default async function ProcurementDetailPage({ params }) {
       </Card>
 
       {/* Orders detail list */}
-      <Card>
+      <Card id="orders">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Users size={16} className="text-zinc-400" />
             <CardTitle>Заявки участников</CardTitle>
             <span className="text-xs text-zinc-400">({submittedOrders.length})</span>
           </div>
@@ -667,9 +690,7 @@ export default async function ProcurementDetailPage({ params }) {
           ) : (
             <div className="space-y-2">
               {submittedOrders.map((order) => {
-                const orderTotal =
-                  order.grandTotal ??
-                  order.items.reduce((s, i) => s + i.qty * i.price, 0);
+                const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
                 return (
                   <details
                     key={order.id}
@@ -692,7 +713,7 @@ export default async function ProcurementDetailPage({ params }) {
                         <div className="flex items-center gap-3 text-xs text-zinc-400">
                           <span>{new Date(order.updatedAt).toLocaleString("ru-RU")}</span>
                           <span className="font-bold text-zinc-700">
-                            {orderTotal.toLocaleString("ru-RU")} ₽
+                            {grandTotal.toLocaleString("ru-RU")} ₽
                           </span>
                         </div>
                       </div>
@@ -714,19 +735,19 @@ export default async function ProcurementDetailPage({ params }) {
                           </li>
                         ))}
                       </ul>
-                      {(order.deliveryShare ?? 0) > 0 && (
+                      {deliveryShare > 0 && (
                         <div className="mt-2 pt-2 border-t border-zinc-100 text-xs text-zinc-500 space-y-0.5">
                           <div className="flex justify-between">
                             <span>Товары</span>
-                            <span>{order.goodsTotal?.toLocaleString("ru-RU")} ₽</span>
+                            <span>{goodsTotal.toLocaleString("ru-RU")} ₽</span>
                           </div>
                           <div className="flex justify-between">
                             <span>Доставка</span>
-                            <span>{order.deliveryShare?.toLocaleString("ru-RU")} ₽</span>
+                            <span>{deliveryShare.toLocaleString("ru-RU")} ₽</span>
                           </div>
                           <div className="flex justify-between font-semibold text-zinc-700">
                             <span>Итого</span>
-                            <span>{order.grandTotal?.toLocaleString("ru-RU")} ₽</span>
+                            <span>{grandTotal.toLocaleString("ru-RU")} ₽</span>
                           </div>
                         </div>
                       )}
@@ -742,17 +763,21 @@ export default async function ProcurementDetailPage({ params }) {
       {/* Audit log */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <History size={16} className="text-zinc-400" />
-            <CardTitle>Журнал действий</CardTitle>
-          </div>
+          <CardTitle>Журнал действий</CardTitle>
         </CardHeader>
         <CardBody>
           {auditLogs.length === 0 ? (
             <p className="text-sm text-zinc-400 py-4 text-center">Нет записей.</p>
           ) : (
             <ul className="space-y-0.5">
-              {auditLogs.map((log) => (
+              {auditLogs.map((log) => {
+                const actorRole =
+                  log.meta && typeof log.meta === "object" && "actorRole" in log.meta
+                    ? log.meta.actorRole
+                    : null;
+                const displayActor = actorRole ?? log.actorType;
+
+                return (
                 <li
                   key={log.id}
                   className="flex flex-wrap gap-2 text-xs py-2 border-b border-zinc-100 last:border-0"
@@ -767,11 +792,12 @@ export default async function ProcurementDetailPage({ params }) {
                         : "text-zinc-500"
                     }
                   >
-                    [{log.actorType}] {log.actorLabel}
+                    [{displayActor}] {log.actorLabel}
                   </span>
                   <code className="text-indigo-600 font-mono">{log.action}</code>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </CardBody>

@@ -1,51 +1,48 @@
 "use client";
 
+import { ActionButtonForm } from "@/components/ui/ActionForm";
+
 export function DeleteSupplierButton({ supplierId, action }) {
   return (
-    <form
+    <ActionButtonForm
       action={action}
-      onSubmit={(e) => {
-        if (!confirm("Удалить поставщика? Удалятся зоны доставки и товары (если они есть — может быть запрещено).")) {
-          e.preventDefault();
-        }
-      }}
-    >
-      <input type="hidden" name="id" value={supplierId} />
-      <button className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">
-        Удалить поставщика
-      </button>
-    </form>
+      hiddenFields={{ id: supplierId }}
+      label="Удалить поставщика"
+      pendingLabel="Удаляем..."
+      confirmText="Удалить поставщика? Если с ним связаны зоны доставки или товары, система остановит операцию."
+      variant="secondary"
+      size="sm"
+      buttonClassName="rounded-xl"
+    />
   );
 }
 
 export function DeleteZoneButton({ zoneId, action }) {
   return (
-    <form
+    <ActionButtonForm
       action={action}
-      onSubmit={(e) => {
-        if (!confirm("Удалить зону доставки?")) e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="id" value={zoneId} />
-      <button className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">
-        Удалить
-      </button>
-    </form>
+      hiddenFields={{ id: zoneId }}
+      label="Удалить"
+      pendingLabel="Удаляем..."
+      confirmText="Удалить зону доставки?"
+      variant="secondary"
+      size="sm"
+      buttonClassName="rounded-xl"
+    />
   );
 }
 
 export function DeleteProductButton({ productId, action }) {
   return (
-    <form
+    <ActionButtonForm
       action={action}
-      onSubmit={(e) => {
-        if (!confirm("Удалить товар?")) e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="id" value={productId} />
-      <button className="rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50">
-        Удалить
-      </button>
-    </form>
+      hiddenFields={{ id: productId }}
+      label="Удалить"
+      pendingLabel="Удаляем..."
+      confirmText="Удалить товар?"
+      variant="secondary"
+      size="sm"
+      buttonClassName="rounded-xl"
+    />
   );
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   assertOrderBelongsToProcurement,
   assertOrderCanCheckin,
+  assertPickupSessionCanCheckin,
 } from "./checkinGuard";
 
 // ── assertOrderBelongsToProcurement ──────────────────────────────────────────
@@ -58,5 +59,37 @@ describe("assertOrderCanCheckin()", () => {
 
   it("бросает ошибку если order равен null", () => {
     expect(() => assertOrderCanCheckin(null)).toThrow("не найдена");
+  });
+});
+
+// ── assertPickupSessionCanCheckin() ───────────────────────────────────────────
+
+describe("assertPickupSessionCanCheckin()", () => {
+  it("не бросает исключение для сессии своей закупки в статусе PLANNED", () => {
+    const pickupSession = { procurementId: "proc-1", status: "PLANNED" };
+    expect(() => assertPickupSessionCanCheckin(pickupSession, "proc-1")).not.toThrow();
+  });
+
+  it("не бросает исключение для сессии своей закупки в статусе ACTIVE", () => {
+    const pickupSession = { procurementId: "proc-1", status: "ACTIVE" };
+    expect(() => assertPickupSessionCanCheckin(pickupSession, "proc-1")).not.toThrow();
+  });
+
+  it("бросает ошибку если сессия относится к другой закупке", () => {
+    const pickupSession = { procurementId: "proc-2", status: "ACTIVE" };
+    expect(() => assertPickupSessionCanCheckin(pickupSession, "proc-1")).toThrow(
+      "не принадлежит"
+    );
+  });
+
+  it("бросает ошибку если сессия закрыта", () => {
+    const pickupSession = { procurementId: "proc-1", status: "CLOSED" };
+    expect(() => assertPickupSessionCanCheckin(pickupSession, "proc-1")).toThrow(
+      "закрыта"
+    );
+  });
+
+  it("бросает ошибку если сессия отсутствует", () => {
+    expect(() => assertPickupSessionCanCheckin(null, "proc-1")).toThrow("не найдена");
   });
 });

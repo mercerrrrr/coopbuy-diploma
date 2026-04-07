@@ -300,6 +300,8 @@ model Order {
 
   @@index([procurementId, guestId])
   @@index([procurementId, userId])
+  @@index([procurementId, status])
+  @@index([userId, status])
 }
 
 model OrderItem {
@@ -401,6 +403,9 @@ model AuditLog {
   entityType EntityType
   entityId   String
   meta       Json?
+
+  @@index([entityId])
+  @@index([action])
 }
 
 model Notification {

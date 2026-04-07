@@ -9,18 +9,17 @@
     "lint": "eslint",
     "test": "vitest",
     "test:run": "vitest run",
-    "seed:demo": "node prisma/seed.demo.cjs",
-    "db:reset:demo": "npx prisma migrate reset --force --skip-seed && node prisma/seed.demo.cjs",
-    "seed:ready": "node prisma/seed.ready.cjs",
-    "db:reset:ready": "npx prisma migrate reset --force --skip-seed && node prisma/seed.ready.cjs"
+    "db:reset": "npx prisma migrate reset --force"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
+    "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "bcryptjs": "^3.0.3",
     "dejavu-fonts-ttf": "^2.37.3",
     "exceljs": "^4.4.0",
+    "framer-motion": "^12.38.0",
     "jose": "^6.1.3",
     "lucide-react": "^0.575.0",
     "next": "16.1.1",

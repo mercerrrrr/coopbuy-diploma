@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterAll } from "vitest";
 
 // ── Hoisted mocks (created before any module is imported) ──────────────────
 const { mockCookieStore, mockCookies, mockJwtVerify, MockSignJWT } = vi.hoisted(() => {
@@ -25,6 +25,8 @@ vi.mock("jose", () => ({ SignJWT: MockSignJWT, jwtVerify: mockJwtVerify }));
 
 import { getSession, setSessionCookie } from "@/lib/auth";
 
+const originalAuthSecret = process.env.AUTH_SECRET;
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function noCookie() {
   mockCookieStore.get.mockReturnValue(undefined);
@@ -34,7 +36,10 @@ function withCookieValue(val) {
 }
 
 describe("getSession()", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.AUTH_SECRET = "test-auth-secret";
+  });
 
   it("возвращает null если cookie отсутствует", async () => {
     noCookie();
@@ -66,7 +71,10 @@ describe("getSession()", () => {
 });
 
 describe("setSessionCookie()", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.AUTH_SECRET = "test-auth-secret";
+  });
 
   it("вызывает cookies().set с httpOnly: true и sameSite: 'lax'", async () => {
     await setSessionCookie({ email: "admin@test.com", role: "ADMIN" });
@@ -93,4 +101,13 @@ describe("setSessionCookie()", () => {
     await setSessionCookie({ email: "u@u.com", role: "OPERATOR" });
     expect(MockSignJWT).toHaveBeenCalled();
   });
+});
+
+afterAll(() => {
+  if (originalAuthSecret === undefined) {
+    delete process.env.AUTH_SECRET;
+    return;
+  }
+
+  process.env.AUTH_SECRET = originalAuthSecret;
 });

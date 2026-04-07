@@ -1,21 +1,30 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import {
+  Bell,
+  CalendarDots,
+  CheckCircle,
+  ClockCounterClockwise,
+  Package,
+  ShoppingCart,
+} from "@phosphor-icons/react/ssr";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { markNotificationRead, markAllNotificationsRead } from "./actions";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Pager } from "@/components/ui/Pager";
-import { Bell } from "lucide-react";
 
 const PAGE_SIZE = 20;
 
 const TYPE_ICONS = {
-  PROCUREMENT_CREATED: "🛒",
-  PROCUREMENT_CLOSED: "🔒",
-  PICKUP_WINDOW_UPDATED: "📅",
-  ORDER_SUBMITTED: "✅",
-  PAYMENT_STATUS_CHANGED: "💳",
-  ORDER_ISSUED: "📦",
+  PROCUREMENT_CREATED: ShoppingCart,
+  PROCUREMENT_CLOSED: ClockCounterClockwise,
+  PICKUP_WINDOW_UPDATED: CalendarDots,
+  ORDER_SUBMITTED: CheckCircle,
+  PAYMENT_STATUS_CHANGED: Bell,
+  ORDER_ISSUED: Package,
 };
 
 export default async function MyNotificationsPage({ searchParams }) {
@@ -52,121 +61,146 @@ export default async function MyNotificationsPage({ searchParams }) {
   const filterQuery = onlyUnread ? { filter: "unread" } : {};
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-zinc-900">Уведомления</h1>
-        {unreadCount > 0 && (
-          <p className="text-sm text-zinc-500 mt-0.5">{unreadCount} непрочитанных</p>
-        )}
-      </div>
+    <main className="cb-shell space-y-4 py-1">
+      <PageHeader
+        eyebrow="Личный кабинет / уведомления"
+        title="История событий по вашим заказам"
+        description={
+          unreadCount > 0
+            ? `${unreadCount} непрочитанных уведомлений. Здесь собраны изменения по закупкам, оплате и выдаче.`
+            : "Здесь собраны изменения по закупкам, оплате и выдаче."
+        }
+        meta={
+          <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-left md:text-right">
+            <div className="cb-kicker">Показано</div>
+            <div className="mt-1.5 text-xl font-semibold text-[color:var(--cb-text)]">
+              {notifications.length}
+            </div>
+            <div className="text-xs text-[color:var(--cb-text-soft)]">сообщений на текущей странице</div>
+          </div>
+        }
+      />
 
-      {/* Filter + mark all */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex gap-1.5">
-          <Link
-            href="/my/notifications"
-            className={[
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              !onlyUnread
-                ? "bg-zinc-900 text-white"
-                : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50",
-            ].join(" ")}
-          >
-            Все
-          </Link>
-          <Link
-            href="/my/notifications?filter=unread"
-            className={[
-              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              onlyUnread
-                ? "bg-zinc-900 text-white"
-                : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50",
-            ].join(" ")}
-          >
-            Непрочитанные
-            {unreadCount > 0 && (
-              <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold min-w-4.5 h-4.5 px-1">
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            )}
-          </Link>
+      <div className="cb-panel-strong rounded-[1.2rem] px-4 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-2 flex-wrap">
+            <Link
+              href="/my/notifications"
+              className={[
+                "inline-flex min-h-9 items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                !onlyUnread
+                  ? "border border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent)] text-white shadow-[var(--cb-shadow-xs)]"
+                  : "border border-[color:var(--cb-line-strong)] bg-white text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]",
+              ].join(" ")}
+            >
+              Все
+            </Link>
+            <Link
+              href="/my/notifications?filter=unread"
+              className={[
+                "inline-flex min-h-9 items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                onlyUnread
+                  ? "border border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent)] text-white shadow-[var(--cb-shadow-xs)]"
+                  : "border border-[color:var(--cb-line-strong)] bg-white text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]",
+              ].join(" ")}
+            >
+              Непрочитанные
+              {unreadCount > 0 && (
+                <span className="inline-flex h-[1.15rem] min-w-[1.15rem] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </Link>
+          </div>
+
+          {unreadCount > 0 && (
+            <form action={markAllNotificationsRead}>
+              <Button type="submit" variant="secondary" size="sm">
+                Отметить всё прочитанным
+              </Button>
+            </form>
+          )}
         </div>
-
-        {unreadCount > 0 && (
-          <form action={markAllNotificationsRead}>
-            <button className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors">
-              Отметить все прочитанными
-            </button>
-          </form>
-        )}
       </div>
 
-      {/* List */}
       {notifications.length === 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <div className="cb-panel-strong rounded-[1.1rem]">
           <EmptyState
-            icon={<Bell size={36} />}
+            icon={<Bell size={36} weight="duotone" />}
             title={onlyUnread ? "Нет непрочитанных" : "Уведомлений пока нет"}
             description={
               onlyUnread
-                ? "Все уведомления прочитаны"
-                : "Здесь появятся уведомления о закупках и заявках"
+                ? "Все уведомления уже отмечены как прочитанные."
+                : "Здесь появятся изменения по закупкам, оплате и выдаче."
             }
           />
         </div>
       )}
 
       <div className="space-y-2">
-        {notifications.map((n) => (
-          <div
-            key={n.id}
-            className={[
-              "rounded-2xl border bg-white p-4 shadow-sm flex gap-3 items-start transition-colors",
-              !n.readAt ? "border-indigo-200 bg-indigo-50/30" : "border-zinc-200",
-            ].join(" ")}
-          >
-            <span className="text-xl shrink-0 mt-0.5 select-none">
-              {TYPE_ICONS[n.type] ?? "🔔"}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <div className="font-semibold text-sm text-zinc-900">
-                  {n.title}
-                  {!n.readAt && (
-                    <span className="ml-2 inline-block w-2 h-2 rounded-full bg-indigo-500 align-middle" />
+        {notifications.map((notification) => {
+          const NotificationIcon = TYPE_ICONS[notification.type] ?? Bell;
+
+          return (
+            <div
+              key={notification.id}
+              className={[
+                "flex items-start gap-4 rounded-[1.2rem] border p-4 shadow-[var(--cb-shadow-xs)] transition-colors",
+                !notification.readAt
+                  ? "border-amber-200 bg-amber-50/60"
+                  : "border-[color:var(--cb-line)] bg-[color:var(--cb-panel-strong)]",
+              ].join(" ")}
+            >
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.9rem] border border-[color:var(--cb-line)] bg-white text-[color:var(--cb-accent)]">
+                <NotificationIcon size={20} weight="duotone" />
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="text-base font-semibold text-[color:var(--cb-text)]">
+                    {notification.title}
+                    {!notification.readAt && (
+                      <span className="ml-2 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle" />
+                    )}
+                  </div>
+                  <div className="shrink-0 text-xs text-[color:var(--cb-text-faint)]">
+                    {new Date(notification.createdAt).toLocaleString("ru-RU")}
+                  </div>
+                </div>
+
+                <p className="mt-1 text-sm leading-relaxed text-[color:var(--cb-text-soft)]">
+                  {notification.body}
+                </p>
+
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {notification.linkUrl && (
+                    <Link
+                      href={notification.linkUrl}
+                      className="text-xs font-medium text-[color:var(--cb-accent)] transition-colors hover:text-[color:var(--cb-accent-strong)]"
+                    >
+                      Открыть
+                    </Link>
+                  )}
+
+                  {!notification.readAt && (
+                    <form action={markNotificationRead}>
+                      <input type="hidden" name="notificationId" value={notification.id} />
+                      <button className="text-xs text-[color:var(--cb-text-faint)] underline transition-colors hover:text-[color:var(--cb-text)]">
+                        Прочитано
+                      </button>
+                    </form>
+                  )}
+
+                  {notification.readAt && (
+                    <span className="text-xs text-[color:var(--cb-text-faint)]">
+                      Прочитано {new Date(notification.readAt).toLocaleString("ru-RU")}
+                    </span>
                   )}
                 </div>
-                <div className="text-xs text-zinc-400 shrink-0">
-                  {new Date(n.createdAt).toLocaleString("ru-RU")}
-                </div>
-              </div>
-              <p className="text-sm text-zinc-600 mt-0.5 leading-relaxed">{n.body}</p>
-              <div className="mt-2 flex items-center gap-3 flex-wrap">
-                {n.linkUrl && (
-                  <Link
-                    href={n.linkUrl}
-                    className="text-xs text-indigo-600 hover:text-indigo-700 font-medium transition-colors"
-                  >
-                    Перейти →
-                  </Link>
-                )}
-                {!n.readAt && (
-                  <form action={markNotificationRead}>
-                    <input type="hidden" name="notificationId" value={n.id} />
-                    <button className="text-xs text-zinc-400 hover:text-zinc-700 underline transition-colors">
-                      Прочитано
-                    </button>
-                  </form>
-                )}
-                {n.readAt && (
-                  <span className="text-xs text-zinc-400">
-                    Прочитано {new Date(n.readAt).toLocaleString("ru-RU")}
-                  </span>
-                )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <Pager page={page} totalPages={totalPages} baseUrl={baseUrl} query={filterQuery} />

@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/db";
+import { requireOperatorOrAdminRoute } from "@/lib/guards";
+import { buildActorAuditMeta, writeProcurementAudit } from "@/lib/audit";
+import { buildProcurementDocumentFilename } from "@/lib/exportDocuments";
 import { createPdfDoc, toPdfResponse } from "@/lib/pdfDoc";
 import { drawTable } from "@/lib/pdfTable";
-import { ensurePage } from "@/lib/pdfLayout";
+import { drawParagraph, ensurePage } from "@/lib/pdfLayout";
 import { rgb } from "pdf-lib";
 
 export const runtime = "nodejs";
@@ -24,6 +27,10 @@ export async function GET(_req, { params }) {
   });
 
   if (!procurement) return new Response("Not found", { status: 404 });
+
+  const { session, response } = await requireOperatorOrAdminRoute(procurement.pickupPointId);
+  if (response) return response;
+  const filename = buildProcurementDocumentFilename(procurement.inviteCode, "agg", "pdf");
 
   const orders = await prisma.order.findMany({
     where: { procurementId: id, status: "SUBMITTED" },
@@ -64,17 +71,36 @@ export async function GET(_req, { params }) {
     txt(s, RM - font.widthOfTextAtSize(s, size), size, color);
     y -= size * 1.6;
   }
+  function summaryRow(label, value, size, color = BLACK) {
+    const labelText = String(label ?? "");
+    const valueText = String(value ?? "");
+    const summaryX = 360;
+    txt(labelText, summaryX, size, color);
+    page.drawText(valueText, {
+      x: RM - font.widthOfTextAtSize(valueText, size),
+      y,
+      size,
+      font,
+      color,
+    });
+    y -= size * 1.7;
+  }
   function gap(n = 1) { y -= 10 * n; }
+  function hline(color = LGRAY) {
+    page.drawLine({ start: { x: LM, y }, end: { x: RM, y }, thickness: 0.5, color });
+    y -= 6;
+  }
 
-  // Header
-  row(`Закупка: ${procurement.title}`, LM, 16);
-  gap(0.3);
-  row(`Поставщик: ${procurement.supplier.name}`, LM, 10, GRAY);
-  row(`НП: ${procurement.settlement.region.name} • ${procurement.settlement.name}`, LM, 10, GRAY);
-  row(`Пункт выдачи: ${procurement.pickupPoint.name}`, LM, 10, GRAY);
+  ({ page, y } = drawParagraph(pdf, page, font, `Закупка: ${procurement.title}`, LM, y, 16, 470, 24, BLACK));
+  gap(0.1);
+  ({ page, y } = drawParagraph(pdf, page, font, `Поставщик: ${procurement.supplier.name}`, LM, y, 10, 470, 14, GRAY));
+  ({ page, y } = drawParagraph(pdf, page, font, `Населённый пункт: ${procurement.settlement.region.name} • ${procurement.settlement.name}`, LM, y, 10, 470, 14, GRAY));
+  ({ page, y } = drawParagraph(pdf, page, font, `Пункт выдачи: ${procurement.pickupPoint.name}`, LM, y, 10, 470, 14, GRAY));
   row(`Дедлайн: ${new Date(procurement.deadlineAt).toLocaleString("ru-RU")}`, LM, 10, GRAY);
   row(`Мин. сбор: ${procurement.minTotalSum.toLocaleString("ru-RU")} руб.`, LM, 10, GRAY);
-  gap(1);
+  gap(0.6);
+  hline();
+  gap(0.8);
 
   if (rows.length === 0) {
     row("Нет подтверждённых заявок.", LM, 10, GRAY);
@@ -89,9 +115,9 @@ export async function GET(_req, { params }) {
       colWidths: [170, 100, 50, 60, 95],
       headers: ["Наименование", "Категория", "Ед.", "Кол-во", "Сумма (руб.)"],
       rows: rows.map((r) => [
-        r.name.slice(0, 30),
-        r.category.slice(0, 16),
-        r.unit.slice(0, 8),
+        r.name,
+        r.category,
+        r.unit,
         String(r.totalQty),
         r.totalSum.toLocaleString("ru-RU"),
       ]),
@@ -101,17 +127,33 @@ export async function GET(_req, { params }) {
     });
     page = result.page;
     y = result.y;
-    ({ page, y } = ensurePage(pdf, page, y, 30));
+    ({ page, y } = ensurePage(pdf, page, y, 52));
 
-    gap(0.5);
-    rowRight(`Итого: ${grandTotal.toLocaleString("ru-RU")} руб.`, 10);
+    gap(1.2);
+    hline();
+    gap(0.7);
+    summaryRow("Итого", `${grandTotal.toLocaleString("ru-RU")} руб.`, 10);
   }
 
-  ({ page, y } = ensurePage(pdf, page, y, 20));
-  gap(1);
+  ({ page, y } = ensurePage(pdf, page, y, 24));
+  gap(0.8);
   const ts = `Сформировано: ${new Date().toLocaleString("ru-RU")}`;
-  txt(ts, RM - font.widthOfTextAtSize(ts, 7), 7, LGRAY);
+  rowRight(ts, 7, LGRAY);
 
   const bytes = await pdf.save();
-  return toPdfResponse(bytes, `procurement_${procurement.inviteCode}_agg.pdf`);
+
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel: String(session?.email ?? "admin"),
+    action: "EXPORT_DOC",
+    procurementId: id,
+    meta: buildActorAuditMeta(session, {
+      type: "export_pdf",
+      rowCount: rows.length,
+      inviteCode: procurement.inviteCode,
+      filename,
+    }),
+  });
+
+  return toPdfResponse(bytes, filename);
 }

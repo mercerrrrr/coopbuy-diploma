@@ -1,71 +1,136 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
+import { Button } from "@/components/ui/Button";
+
+const fieldClassName =
+  "h-10 w-full rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm text-[color:var(--cb-text)] outline-none focus:border-[color:rgba(var(--cb-accent-rgb),0.34)]";
 
 export function RegisterForm({ action, settlements, next }) {
   const [state, formAction, pending] = useActionState(action, null);
+  const [settlementQuery, setSettlementQuery] = useState("");
+
+  const filteredSettlements = useMemo(() => {
+    const query = settlementQuery.trim().toLowerCase();
+    if (!query) return settlements;
+
+    return settlements.filter((settlement) => {
+      const haystack = `${settlement.name} ${settlement.region.name}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [settlementQuery, settlements]);
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form action={formAction} className="space-y-4">
       {next && <input type="hidden" name="next" value={next} />}
+
       {state?.error && (
-        <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-[0.95rem] border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-800"
+        >
           {state.error}
         </p>
       )}
-      <input
-        name="fullName"
-        placeholder="Полное имя"
-        required
-        autoComplete="name"
-        className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-      />
-      <input
-        name="email"
-        type="email"
-        placeholder="Email"
-        required
-        autoComplete="email"
-        className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-      />
-      <input
-        name="phone"
-        type="tel"
-        placeholder="Телефон (необязательно)"
-        autoComplete="tel"
-        className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-      />
-      <input
-        name="password"
-        type="password"
-        placeholder="Пароль (мин. 8 символов)"
-        required
-        autoComplete="new-password"
-        className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-      />
-      <div>
-        <label className="block text-xs text-zinc-500 mb-1">Населённый пункт *</label>
+
+      <div className="grid gap-2">
+        <label htmlFor="register-full-name" className="text-sm font-medium text-[color:var(--cb-text)]">
+          Полное имя
+        </label>
+        <input
+          id="register-full-name"
+          name="fullName"
+          placeholder="Имя и фамилия"
+          required
+          autoComplete="name"
+          maxLength={120}
+          className={fieldClassName}
+        />
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid gap-2">
+          <label htmlFor="register-email" className="text-sm font-medium text-[color:var(--cb-text)]">
+            Email
+          </label>
+          <input
+            id="register-email"
+            name="email"
+            type="email"
+            placeholder="name@domain.ru"
+            required
+            autoComplete="email"
+            className={fieldClassName}
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <label htmlFor="register-phone" className="text-sm font-medium text-[color:var(--cb-text)]">
+            Телефон
+          </label>
+          <input
+            id="register-phone"
+            name="phone"
+            type="tel"
+            placeholder="+7 900 000-00-00"
+            autoComplete="tel"
+            maxLength={20}
+            className={fieldClassName}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        <label htmlFor="register-password" className="text-sm font-medium text-[color:var(--cb-text)]">
+          Пароль
+        </label>
+        <input
+          id="register-password"
+          name="password"
+          type="password"
+          placeholder="Минимум 8 символов"
+          required
+          autoComplete="new-password"
+          className={fieldClassName}
+        />
+      </div>
+
+      <div className="grid gap-2">
+        <label htmlFor="register-settlement" className="text-sm font-medium text-[color:var(--cb-text)]">
+          Населённый пункт
+        </label>
+        <input
+          type="search"
+          value={settlementQuery}
+          onChange={(e) => setSettlementQuery(e.target.value)}
+          placeholder="Поиск по населённому пункту"
+          className={fieldClassName}
+        />
         <select
+          id="register-settlement"
           name="settlementId"
           required
           defaultValue=""
-          className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+          className={fieldClassName}
         >
-          <option value="" disabled>Выберите…</option>
-          {settlements.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.region.name} — {s.name}
+          <option value="" disabled>
+            Выберите населённый пункт
+          </option>
+          {filteredSettlements.map((settlement) => (
+            <option key={settlement.id} value={settlement.id}>
+              {settlement.name} {settlement.region.name ? `· ${settlement.region.name}` : ""}
             </option>
           ))}
         </select>
+        <div className="text-xs text-[color:var(--cb-text-faint)]">
+          Сначала выберите населённый пункт. Регион указан только для уточнения.
+        </div>
       </div>
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
-      >
-        {pending ? "Регистрация…" : "Зарегистрироваться"}
-      </button>
+
+      <Button type="submit" loading={pending} className="w-full justify-center">
+        {pending ? "Создаём профиль" : "Зарегистрироваться"}
+      </Button>
     </form>
   );
 }

@@ -1,32 +1,29 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/Button";
+import { InlineMessage } from "@/components/ui/InlineMessage";
 
-function Msg({ state }) {
+function Message({ state }) {
   if (!state?.message) return null;
-  const ok = state.ok;
 
   return (
-    <div
-      className={[
-        "mt-3 rounded-xl border px-3 py-2 text-sm",
-        ok
-          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-          : "border-red-200 bg-red-50 text-red-900",
-      ].join(" ")}
-    >
+    <InlineMessage type={state.ok ? "success" : "error"} className="mt-3">
       {state.message}
-    </div>
+    </InlineMessage>
   );
 }
 
 function SubmitButton({ children }) {
   return (
-    <button className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+    <Button type="submit" size="md">
       {children}
-    </button>
+    </Button>
   );
 }
+
+const inputClassName =
+  "h-10 rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm outline-none focus:border-[color:rgba(var(--cb-accent-rgb),0.34)]";
 
 export function CreateSupplierForm({ action }) {
   const [state, formAction] = useActionState(action, null);
@@ -34,36 +31,16 @@ export function CreateSupplierForm({ action }) {
   return (
     <div>
       <form action={formAction} className="mt-3 grid gap-3 md:grid-cols-2">
-        <input
-          name="name"
-          placeholder="Название (например: Оптовик-Юг)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
-
-        <input
-          name="minOrderSum"
-          placeholder="Мин. сумма заказа (например: 10000)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
-
-        <input
-          name="phone"
-          placeholder="Телефон (необязательно)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
-
-        <input
-          name="email"
-          placeholder="Email (необязательно)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
-
+        <input name="name" placeholder="Название поставщика" className={inputClassName} />
+        <input name="minOrderSum" placeholder="Минимальная сумма заказа" className={inputClassName} />
+        <input name="phone" placeholder="Телефон" className={inputClassName} />
+        <input name="email" placeholder="Email" className={inputClassName} />
         <div className="md:col-span-2">
           <SubmitButton>Добавить поставщика</SubmitButton>
         </div>
       </form>
 
-      <Msg state={state} />
+      <Message state={state} />
     </div>
   );
 }
@@ -78,15 +55,15 @@ export function AddDeliveryZoneForm({ action, supplierId, settlements }) {
 
         <select
           name="settlementId"
-          className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 md:w-105"
+          className={`w-full md:w-[26rem] ${inputClassName}`}
           defaultValue=""
         >
           <option value="" disabled>
-            Выбери населённый пункт…
+            Выберите населённый пункт
           </option>
-          {settlements.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
+          {settlements.map((settlement) => (
+            <option key={settlement.id} value={settlement.id}>
+              {settlement.label}
             </option>
           ))}
         </select>
@@ -94,7 +71,7 @@ export function AddDeliveryZoneForm({ action, supplierId, settlements }) {
         <SubmitButton>Добавить зону</SubmitButton>
       </form>
 
-      <Msg state={state} />
+      <Message state={state} />
     </div>
   );
 }
@@ -107,58 +84,40 @@ export function CreateProductForm({ action, supplierId, categories, units }) {
       <form action={formAction} className="mt-3 grid gap-3 md:grid-cols-2">
         <input type="hidden" name="supplierId" value={supplierId} />
 
-        <input
-          name="name"
-          placeholder="Название товара (например: Гречка 800г)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
+        <input name="name" placeholder="Наименование товара" className={inputClassName} />
 
-        <select
-          name="categoryId"
-          defaultValue=""
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        >
-          <option value="" disabled>Категория…</option>
-          {(categories ?? []).map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+        <select name="categoryId" defaultValue="" className={inputClassName}>
+          <option value="" disabled>
+            Категория
+          </option>
+          {(categories ?? []).map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
           ))}
         </select>
 
-        <select
-          name="unitId"
-          defaultValue=""
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        >
-          <option value="" disabled>Единица измерения…</option>
-          {(units ?? []).map((u) => (
-            <option key={u.id} value={u.id}>{u.name}</option>
+        <select name="unitId" defaultValue="" className={inputClassName}>
+          <option value="" disabled>
+            Единица измерения
+          </option>
+          {(units ?? []).map((unit) => (
+            <option key={unit.id} value={unit.id}>
+              {unit.name}
+            </option>
           ))}
         </select>
 
-        <input
-          name="price"
-          placeholder="Цена (целое число, например: 120)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
-
-        <input
-          name="sku"
-          placeholder="SKU (необязательно)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
-
-        <input
-          name="imageUrl"
-          placeholder="Ссылка на картинку (необязательно)"
-          className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-        />
+        <input name="price" placeholder="Цена" className={inputClassName} />
+        <input name="sku" placeholder="SKU" className={inputClassName} />
+        <input name="imageUrl" placeholder="Ссылка на изображение" className={inputClassName} />
 
         <div className="md:col-span-2">
           <SubmitButton>Добавить товар</SubmitButton>
         </div>
       </form>
 
-      <Msg state={state} />
+      <Message state={state} />
     </div>
   );
 }

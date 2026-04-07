@@ -2,38 +2,46 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Bell, Package, ShoppingCart } from "@phosphor-icons/react";
+import { MY_NAV_ITEMS } from "@/lib/constants";
 
 export function MyNavLinks({ unreadCount = 0 }) {
   const pathname = usePathname();
 
-  const links = [
-    { href: "/my/procurements", label: "Закупки" },
-    { href: "/my/orders", label: "Заявки" },
-    {
-      href: "/my/notifications",
-      label: "Уведомления",
-      badge: unreadCount > 0 ? (unreadCount > 9 ? "9+" : String(unreadCount)) : null,
-    },
-  ];
+  const iconMap = { ShoppingCart, Package, Bell };
+  const links = MY_NAV_ITEMS.map((item) => ({
+    ...item,
+    icon: iconMap[item.icon],
+    badge:
+      item.href === "/my/notifications" && unreadCount > 0
+        ? unreadCount > 9
+          ? "9+"
+          : String(unreadCount)
+        : null,
+  }));
 
   return (
-    <div className="flex gap-1">
+    <div className="flex flex-wrap gap-2">
       {links.map((link) => {
-        const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
+        const Icon = link.icon;
+        const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+
         return (
           <Link
             key={link.href}
             href={link.href}
-            className={[
-              "relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
+            className={`flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium ${
               isActive
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100",
-            ].join(" ")}
+                ? "border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent-soft)] text-[color:var(--cb-accent-strong)]"
+                : "border-transparent text-[color:var(--cb-text-soft)] hover:border-[color:var(--cb-line)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
+            }`}
           >
-            {link.label}
+            <span className="inline-flex items-center gap-2">
+              <Icon size={16} weight={isActive ? "fill" : "regular"} />
+              {link.label}
+            </span>
             {link.badge && (
-              <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold min-w-4.5 h-4.5 px-1 leading-none">
+              <span className="inline-flex min-w-5 items-center justify-center rounded-md bg-[color:var(--cb-accent)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 {link.badge}
               </span>
             )}

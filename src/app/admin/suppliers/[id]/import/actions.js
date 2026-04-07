@@ -51,15 +51,16 @@ async function findOrCreateUnit(rawName) {
 export async function createDraftBatch(_prev, fd) {
   const session = await getSession();
   if (!session || session.role !== "ADMIN") {
-    return { error: "Нет доступа. Требуется роль ADMIN." };
+    return { error: "Нет доступа. Нужна роль администратора." };
   }
 
   const supplierId = fd.get("supplierId");
-  if (!supplierId) return { error: "supplierId не передан." };
+  if (!supplierId) return { error: "Не указан поставщик." };
 
   const file = fd.get("file");
   if (!file || file.size === 0) return { error: "Файл не выбран." };
-  if (!file.name.toLowerCase().endsWith(".csv")) return { error: "Принимаются только файлы .csv" };
+  if (file.size > 5 * 1024 * 1024) return { error: "Файл слишком большой (макс. 5 МБ)." };
+  if (!file.name.toLowerCase().endsWith(".csv")) return { error: "Принимаются только файлы .csv." };
 
   let text;
   try { text = await file.text(); }
@@ -151,7 +152,7 @@ export async function createDraftBatch(_prev, fd) {
   await prisma.auditLog.create({
     data: {
       actorType:  "ADMIN",
-      actorLabel: session.email,
+      actorLabel: session?.email ?? "system",
       action:     "IMPORT_PRICE_LIST_DRAFT",
       entityType: "PRICE_IMPORT_BATCH",
       entityId:   batch.id,
@@ -175,13 +176,13 @@ export async function applyBatch(_prev, fd) {
   }
 
   const batchId = fd.get("batchId");
-  if (!batchId) return { error: "batchId не передан." };
+  if (!batchId) return { error: "Не указан черновик импорта." };
 
   const batch = await prisma.priceImportBatch.findUnique({
     where: { id: batchId },
     include: { rows: { where: { status: "OK" } } },
   });
-  if (!batch) return { error: "Batch не найден." };
+  if (!batch) return { error: "Черновик импорта не найден." };
   if (batch.status === "APPLIED") return { error: "Этот импорт уже применён." };
 
   const supplierId = batch.supplierId;
@@ -218,7 +219,10 @@ export async function applyBatch(_prev, fd) {
       if (!category || !unit) {
         await prisma.priceImportRow.update({
           where: { id: row.id },
-          data: { status: "ERROR", errorMessage: "Не удалось создать категорию или единицу измерения" },
+          data: {
+            status: "ERROR",
+            errorMessage: "Не удалось создать категорию или единицу измерения.",
+          },
         });
         errorsCount++;
         continue;
@@ -280,7 +284,7 @@ export async function applyBatch(_prev, fd) {
   await prisma.auditLog.create({
     data: {
       actorType:  "ADMIN",
-      actorLabel: session.email,
+      actorLabel: session?.email ?? "system",
       action:     "APPLY_PRICE_LIST",
       entityType: "PRICE_IMPORT_BATCH",
       entityId:   batchId,

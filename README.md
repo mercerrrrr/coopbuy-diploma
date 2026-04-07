@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# CoopBuy
 
-## Getting Started
+Информационная система для пилотной модели совместных закупок в одном регионе с несколькими населёнными пунктами и пунктами выдачи.
 
-First, run the development server:
+## Назначение
+
+Система разделяет роли `ADMIN`, `OPERATOR` и `RESIDENT`, поддерживает закупки по settlement, оформление заказов, уведомления, выдачу по QR/ID, отчёты и экспорт документов.
+
+## Стек
+
+- Next.js 16 + React 19
+- Prisma + PostgreSQL
+- Server Actions
+- Tailwind CSS 4
+- Zod
+- Vitest
+
+## Запуск
 
 ```bash
+npm install
+npm run db:reset
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Приложение доступно по адресу `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Seed
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Официальный seed path: `prisma/seed.js`
+- Официальный сценарий наполнения базы: `npm run db:reset`
+- Seed создаёт один пилотный регион и несколько settlement внутри него
 
-## Learn More
+## Тестовые роли
 
-To learn more about Next.js, take a look at the following resources:
+| Роль | Email | Пароль | Назначение |
+| --- | --- | --- | --- |
+| ADMIN | `admin@local.test` | `Admin123!` | Администрирование, справочники, закупки, пользователи |
+| OPERATOR | `operator1@local.test` | `Operator123!` | Работа со своим ПВЗ |
+| RESIDENT | `user1@local.test` | `User123!` | Житель settlement №1 |
+| RESIDENT | `user2@local.test` | `User123!` | Житель settlement №1 |
+| RESIDENT | `user3@local.test` | `User123!` | Житель settlement №2 |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Ключевые возможности
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- авторизация по `email + password`
+- управление закупками, поставщиками, территориями и справочниками
+- минимальное администрирование пользователей через `/admin/users`
+- оформление заявок жителями только в рамках своего населённого пункта
+- расчёт доставки и сумм заказа
+- квитанция заказа на странице `/my/orders/[orderId]` и PDF-экспорт
+- выдача заказов по QR/ID, отчёты, экспорт PDF/XLSX/CSV
 
-## Deploy on Vercel
+## Документация
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `docs/RUNBOOK.md` — официальный сценарий запуска и проверки
+- `docs/IMPLEMENTATION_ALIGNMENT.md` — фиксация текущей реализации для пояснительной записки

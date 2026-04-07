@@ -31,3 +31,16 @@ export function assertOrderCanCheckin(order) {
     );
   }
 }
+
+/**
+ * Asserts that a pickup session belongs to the procurement and can accept check-ins.
+ */
+export function assertPickupSessionCanCheckin(pickupSession, procurementId) {
+  if (!pickupSession) throw new Error("Сессия выдачи не найдена.");
+  if (pickupSession.procurementId !== procurementId) {
+    throw new Error("Сессия выдачи не принадлежит данной закупке.");
+  }
+  if (pickupSession.status === "CLOSED") {
+    throw new Error("Сессия выдачи уже закрыта.");
+  }
+}

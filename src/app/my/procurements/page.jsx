@@ -1,20 +1,26 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { autoCloseExpiredProcurements } from "@/lib/procurements/autoCloseExpired";
 import { InlineMessage } from "@/components/ui/InlineMessage";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ShoppingCart } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function MyProcurementsPage() {
   const session = await getSession();
   if (!session) redirect("/auth/login?next=/my/procurements");
 
   const { settlementId } = session;
-
   const now = new Date();
   await autoCloseExpiredProcurements(prisma, now);
+
+  const settlement = settlementId
+    ? await prisma.settlement.findUnique({
+        where: { id: String(settlementId) },
+        include: { region: true },
+      })
+    : null;
 
   const procurements = settlementId
     ? await prisma.procurement.findMany({
@@ -26,6 +32,7 @@ export default async function MyProcurementsPage() {
         include: {
           supplier: true,
           pickupPoint: true,
+          settlement: { include: { region: true } },
           orders: {
             where: { status: "SUBMITTED" },
             include: { items: true },
@@ -36,13 +43,30 @@ export default async function MyProcurementsPage() {
     : [];
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-zinc-900">Активные закупки</h1>
-        <p className="text-sm text-zinc-500 mt-0.5">
-          Закупки для вашего населённого пункта
-        </p>
-      </div>
+    <main className="cb-shell space-y-4 py-1">
+      <PageHeader
+        eyebrow="Доступные закупки"
+        title="Закупки по вашему населённому пункту"
+        description="Показаны открытые закупки для населённого пункта, привязанного к вашей учётной записи. В пилотном сценарии это основной пользовательский фильтр."
+        meta={
+          settlementId ? (
+            <div className="rounded-[0.9rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-left md:text-right">
+              <div className="text-xs text-[color:var(--cb-text-soft)]">Ваш населённый пункт</div>
+              <div className="mt-1 text-base font-semibold text-[color:var(--cb-text)]">
+                {settlement?.name ?? "Привязан"}
+              </div>
+              {settlement?.region?.name && (
+                <div className="mt-1 text-xs text-[color:var(--cb-text-faint)]">
+                  {settlement.region.name}
+                </div>
+              )}
+              <div className="mt-2 text-xs text-[color:var(--cb-text-soft)]">
+                Открытых закупок: {procurements.length}
+              </div>
+            </div>
+          ) : null
+        }
+      />
 
       {!settlementId && (
         <InlineMessage type="warning">
@@ -50,102 +74,135 @@ export default async function MyProcurementsPage() {
         </InlineMessage>
       )}
 
+      {settlement && (
+        <InlineMessage type="neutral">
+          Основной фильтр пилотного сценария: населённый пункт{" "}
+          <span className="font-medium text-[color:var(--cb-text)]">{settlement.name}</span>.
+          {settlement.region?.name && (
+            <span>
+              {" "}
+              Регион остаётся в модели и используется для масштабирования: {settlement.region.name}.
+            </span>
+          )}
+        </InlineMessage>
+      )}
+
       {procurements.length === 0 && settlementId && (
-        <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <div className="cb-panel-strong rounded-[1.1rem]">
           <EmptyState
-            icon={<ShoppingCart size={36} />}
             title="Нет активных закупок"
-            description="Для вашего населённого пункта сейчас нет открытых закупок"
+            description="Для вашего населённого пункта сейчас нет открытых закупок."
           />
         </div>
       )}
 
-      {procurements.map((p) => {
-        const submittedTotal = p.orders.reduce(
-          (sum, o) => sum + o.items.reduce((s, i) => s + i.qty * i.price, 0),
-          0
-        );
-        const progress =
-          p.minTotalSum > 0
-            ? Math.min(100, Math.round((submittedTotal / p.minTotalSum) * 100))
-            : null;
-        const deadlinePassed = new Date() > new Date(p.deadlineAt);
+      <section className="grid gap-4 xl:grid-cols-2">
+        {procurements.map((procurement) => {
+          const submittedTotal = procurement.orders.reduce(
+            (sum, order) =>
+              sum + order.items.reduce((itemSum, item) => itemSum + item.qty * item.price, 0),
+            0
+          );
+          const progress =
+            procurement.minTotalSum > 0
+              ? Math.min(100, Math.round((submittedTotal / procurement.minTotalSum) * 100))
+              : null;
+          const deadlinePassed = new Date() > new Date(procurement.deadlineAt);
 
-        return (
-          <div
-            key={p.id}
-            className="rounded-2xl border border-zinc-200 bg-white shadow-sm hover:shadow-md transition-shadow p-5 space-y-3"
-          >
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <div className="font-semibold text-zinc-900">{p.title}</div>
-                <div className="text-sm text-zinc-500 mt-0.5">
-                  {p.supplier.name} · {p.pickupPoint.name}
+          return (
+            <article
+              key={procurement.id}
+              className="cb-panel-strong rounded-[1rem] p-4 md:p-5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 max-w-2xl">
+                  <div className="text-lg font-semibold text-[color:var(--cb-text)]">
+                    {procurement.title}
+                  </div>
+                  <div className="mt-1 text-sm text-[color:var(--cb-text-soft)]">
+                    {procurement.supplier.name} · {procurement.pickupPoint.name}
+                  </div>
+                  <div className="mt-1 text-xs text-[color:var(--cb-text-faint)]">
+                    Населённый пункт: {procurement.settlement.name}
+                    {procurement.settlement.region?.name
+                      ? ` · ${procurement.settlement.region.name}`
+                      : ""}
+                  </div>
+                </div>
+
+                <Link
+                  href={`/p/${procurement.inviteCode}`}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent)] px-3 py-2 text-sm font-medium text-white shadow-[var(--cb-shadow-xs)] hover:bg-[color:var(--cb-accent-strong)]"
+                >
+                  Открыть
+                </Link>
+              </div>
+
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="rounded-lg border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-sm">
+                  <div className="text-xs text-[color:var(--cb-text-soft)]">Дедлайн</div>
+                  <div
+                    className={`mt-1.5 font-medium ${
+                      deadlinePassed ? "text-rose-700" : "text-[color:var(--cb-text)]"
+                    }`}
+                  >
+                    {new Date(procurement.deadlineAt).toLocaleString("ru-RU")}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-sm">
+                  <div className="text-xs text-[color:var(--cb-text-soft)]">Минимальная сумма</div>
+                  <div className="mt-1.5 font-medium text-[color:var(--cb-text)]">
+                    {procurement.minTotalSum.toLocaleString("ru-RU")} ₽
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-sm">
+                  <div className="text-xs text-[color:var(--cb-text-soft)]">Текущий сбор</div>
+                  <div className="mt-1.5 font-medium text-[color:var(--cb-text)]">
+                    {submittedTotal.toLocaleString("ru-RU")} ₽
+                  </div>
+                  <div className="mt-1 text-xs text-[color:var(--cb-text-soft)]">
+                    {progress !== null ? `${progress}% от порога` : "Без порога"}
+                  </div>
                 </div>
               </div>
-              <Link
-                href={`/p/${p.inviteCode}`}
-                className="shrink-0 inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
-              >
-                Перейти →
-              </Link>
-            </div>
 
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
-              <span>
-                Дедлайн:{" "}
-                <span
-                  className={
-                    deadlinePassed
-                      ? "text-red-600 font-semibold"
-                      : "font-medium text-zinc-700"
-                  }
-                >
-                  {new Date(p.deadlineAt).toLocaleString("ru-RU")}
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-[color:var(--cb-text-soft)]">
+                <span className="rounded-md border border-[color:var(--cb-line)] bg-white px-2.5 py-1">
+                  {procurement.orders.length} подтверждённых заявок
                 </span>
-              </span>
-              {p.minTotalSum > 0 && (
-                <span>
-                  Мин. сбор:{" "}
-                  <span className="font-medium text-zinc-700">
-                    {p.minTotalSum.toLocaleString("ru-RU")} ₽
-                  </span>
-                  {" · "}Собрано:{" "}
-                  <span className="font-medium text-zinc-700">
-                    {submittedTotal.toLocaleString("ru-RU")} ₽
-                  </span>
-                  {progress !== null && (
-                    <span className="ml-1 text-indigo-600 font-semibold">({progress}%)</span>
-                  )}
+                <span className="rounded-md border border-[color:var(--cb-line)] bg-white px-2.5 py-1">
+                  Пункт выдачи: {procurement.pickupPoint.name}
                 </span>
+              </div>
+
+              {progress !== null && (
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[rgba(var(--cb-accent-rgb),0.12)]">
+                  <div
+                    className="h-1.5 rounded-full bg-[color:var(--cb-accent)] animate-progress"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
               )}
-            </div>
 
-            {progress !== null && (
-              <div className="h-1.5 w-full rounded-full bg-zinc-100 overflow-hidden">
-                <div
-                  className="h-1.5 rounded-full bg-indigo-500 animate-progress"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            )}
-
-            {p.pickupWindowStart && (
-              <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
-                Выдача:{" "}
-                <span className="font-medium">
-                  {new Date(p.pickupWindowStart).toLocaleString("ru-RU")}
-                  {p.pickupWindowEnd &&
-                    ` — ${new Date(p.pickupWindowEnd).toLocaleString("ru-RU")}`}
-                </span>
-                {p.pickupInstructions && (
-                  <span className="ml-2 text-sky-700">{p.pickupInstructions}</span>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })}
+              {procurement.pickupWindowStart && (
+                <InlineMessage type="info" className="mt-3">
+                  Выдача:{" "}
+                  <span className="font-medium">
+                    {new Date(procurement.pickupWindowStart).toLocaleString("ru-RU")}
+                    {procurement.pickupWindowEnd &&
+                      ` — ${new Date(procurement.pickupWindowEnd).toLocaleString("ru-RU")}`}
+                  </span>
+                  {procurement.pickupInstructions && (
+                    <span className="ml-2 text-sky-700">{procurement.pickupInstructions}</span>
+                  )}
+                </InlineMessage>
+              )}
+            </article>
+          );
+        })}
+      </section>
     </main>
   );
 }

@@ -1,20 +1,23 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireOperatorOrAdminRoute } from "@/lib/guards";
+import { PAYMENT_LABELS } from "@/lib/constants";
+import { buildActorAuditMeta, writeProcurementAudit } from "@/lib/audit";
+import { buildProcurementDocumentFilename } from "@/lib/exportDocuments";
+import { getOrderTotals } from "@/lib/orders";
 import ExcelJS from "exceljs";
-
-const PAYMENT_LABELS = {
-  UNPAID: "Не оплачено",
-  PAID: "Оплачено",
-  PAY_ON_PICKUP: "При выдаче",
-};
 
 export async function GET(_req, { params }) {
   const { id } = await params;
 
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "OPERATOR")) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const procurement = await prisma.procurement.findUnique({
+    where: { id },
+    select: { pickupPointId: true, inviteCode: true },
+  });
+  if (!procurement) return new Response("Not found", { status: 404 });
+
+  const { session, response } = await requireOperatorOrAdminRoute(procurement.pickupPointId);
+  if (response) return response;
+  const filename = buildProcurementDocumentFilename(procurement.inviteCode, "payments", "xlsx");
 
   const orders = await prisma.order.findMany({
     where: { procurementId: id, status: "SUBMITTED" },
@@ -40,9 +43,7 @@ export async function GET(_req, { params }) {
   ws.getRow(1).font = { bold: true };
 
   for (const order of orders) {
-    const goodsTotal = order.goodsTotal ?? 0;
-    const deliveryShare = order.deliveryShare ?? 0;
-    const grandTotal = order.grandTotal ?? goodsTotal;
+    const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
     ws.addRow({
       name: order.participantName ?? "",
       phone: order.participantPhone ?? "",
@@ -57,22 +58,24 @@ export async function GET(_req, { params }) {
 
   const buf = await wb.xlsx.writeBuffer();
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel: session.email,
-      action: "EXPORT_DOC",
-      entityType: "PROCUREMENT",
-      entityId: id,
-      meta: { type: "payments_xlsx", orderCount: orders.length },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel: String(session.email ?? "admin"),
+    action: "EXPORT_DOC",
+    procurementId: id,
+    meta: buildActorAuditMeta(session, {
+      type: "payments_xlsx",
+      orderCount: orders.length,
+      inviteCode: procurement.inviteCode,
+      filename,
+    }),
   });
 
   return new Response(buf, {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="payments_${id.slice(0, 8)}.xlsx"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
 }

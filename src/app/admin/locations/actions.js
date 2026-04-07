@@ -20,17 +20,18 @@ export async function createRegion(_prev, formData) {
   }
 }
 
-export async function deleteRegion(formData) {
+export async function deleteRegion(_prev, formData) {
   await assertAdmin();
   const id = str(formData, "id");
-  if (!id) throw new Error("Не передан id региона.");
+  if (!id) return { ok: false, message: "Не передан регион." };
 
   try {
     await prisma.region.delete({ where: { id } });
     revalidatePath("/admin/locations");
+    return { ok: true, message: "Регион удалён." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }
 
@@ -51,17 +52,18 @@ export async function createSettlement(_prev, formData) {
   }
 }
 
-export async function deleteSettlement(formData) {
+export async function deleteSettlement(_prev, formData) {
   await assertAdmin();
   const id = str(formData, "id");
-  if (!id) throw new Error("Не передан id населённого пункта.");
+  if (!id) return { ok: false, message: "Не передан населённый пункт." };
 
   try {
     await prisma.settlement.delete({ where: { id } });
     revalidatePath("/admin/locations");
+    return { ok: true, message: "Населённый пункт удалён." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }
 
@@ -88,16 +90,17 @@ export async function createPickupPoint(_prev, formData) {
   }
 }
 
-export async function deletePickupPoint(formData) {
+export async function deletePickupPoint(_prev, formData) {
   await assertAdmin();
   const id = str(formData, "id");
-  if (!id) throw new Error("Не передан id пункта выдачи.");
+  if (!id) return { ok: false, message: "Не передан пункт выдачи." };
 
   try {
     await prisma.pickupPoint.delete({ where: { id } });
     revalidatePath("/admin/locations");
+    return { ok: true, message: "Пункт выдачи удалён." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }

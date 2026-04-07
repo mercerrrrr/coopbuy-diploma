@@ -1,27 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 export function CopyLinkButton({ textToCopy, label = "Скопировать" }) {
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   async function handleClick() {
     try {
       await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => setCopied(false), 1800);
     } catch {
-      // fallback: select text
+      // no-op
     }
   }
 
   return (
-    <button
+    <Button
       type="button"
       onClick={handleClick}
-      className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 transition-colors"
+      variant={copied ? "success" : "secondary"}
+      size="sm"
+      className="min-w-[108px] justify-center"
     >
-      {copied ? "Скопировано ✓" : label}
-    </button>
+      {copied ? "Скопировано" : label}
+    </Button>
   );
 }

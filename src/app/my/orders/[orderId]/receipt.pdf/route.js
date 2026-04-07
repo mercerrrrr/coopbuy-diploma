@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { PAYMENT_LABELS } from "@/lib/constants";
+import { buildActorAuditMeta, writeOrderAudit } from "@/lib/audit";
+import { buildOrderDocumentFilename } from "@/lib/exportDocuments";
 import { createPdfDoc, toPdfResponse } from "@/lib/pdfDoc";
 import { drawTable } from "@/lib/pdfTable";
-import { ensurePage } from "@/lib/pdfLayout";
+import { drawParagraph, ensurePage } from "@/lib/pdfLayout";
+import { getOrderTotals } from "@/lib/orders";
 import { rgb } from "pdf-lib";
 
 export const runtime = "nodejs";
@@ -39,14 +43,11 @@ export async function GET(_req, { params }) {
     return new Response("Not found", { status: 404 });
   }
 
-  const goodsTotal = order.goodsTotal ?? order.items.reduce((s, i) => s + i.qty * i.price, 0);
-  const deliveryShare = order.deliveryShare ?? 0;
-  const grandTotal = order.grandTotal ?? goodsTotal;
-  const paymentLabel = {
-    UNPAID: "Не оплачено", PAID: "Оплачено", PAY_ON_PICKUP: "Оплата при выдаче",
-  }[order.paymentStatus] ?? order.paymentStatus;
+  const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
+  const paymentLabel = PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus;
   const p = order.procurement;
   const isCheckedIn = Boolean(order.checkin);
+  const filename = buildOrderDocumentFilename(order.id, "receipt", "pdf");
 
   const { pdf, font } = await createPdfDoc();
   let page = pdf.addPage([W, H]);
@@ -60,6 +61,20 @@ export async function GET(_req, { params }) {
     const s = String(str ?? "");
     txt(s, RM - font.widthOfTextAtSize(s, size), size, color);
     y -= size * 1.6;
+  }
+  function summaryRow(label, value, size, color = BLACK) {
+    const labelText = String(label ?? "");
+    const valueText = String(value ?? "");
+    const summaryX = 360;
+    txt(labelText, summaryX, size, color);
+    page.drawText(valueText, {
+      x: RM - font.widthOfTextAtSize(valueText, size),
+      y,
+      size,
+      font,
+      color,
+    });
+    y -= size * 1.7;
   }
   function rowCenter(str, size, color = BLACK) {
     const s = String(str ?? "");
@@ -78,20 +93,22 @@ export async function GET(_req, { params }) {
   hline();
 
   // Procurement info
-  row(`Закупка: ${p.title.slice(0, 60)}`, LM, 11);
-  row(`Поставщик: ${p.supplier.name.slice(0, 55)}`, LM, 10, GRAY);
-  row(`НП: ${p.settlement.region.name} • ${p.settlement.name}`, LM, 10, GRAY);
-  row(`Пункт выдачи: ${p.pickupPoint.name}`, LM, 10, GRAY);
+  ({ page, y } = drawParagraph(pdf, page, font, `Закупка: ${p.title}`, LM, y, 11, 470, 15, BLACK));
+  ({ page, y } = drawParagraph(pdf, page, font, `Поставщик: ${p.supplier.name}`, LM, y, 10, 470, 14, GRAY));
+  ({ page, y } = drawParagraph(pdf, page, font, `Населённый пункт: ${p.settlement.region.name} • ${p.settlement.name}`, LM, y, 10, 470, 14, GRAY));
+  ({ page, y } = drawParagraph(pdf, page, font, `Пункт выдачи: ${p.pickupPoint.name}`, LM, y, 10, 470, 14, GRAY));
   if (p.pickupPoint.address) {
-    row(`Адрес: ${p.pickupPoint.address.slice(0, 60)}`, LM, 10, GRAY);
+    ({ page, y } = drawParagraph(pdf, page, font, `Адрес: ${p.pickupPoint.address}`, LM, y, 10, 470, 14, GRAY));
   }
   if (p.pickupWindowStart) {
     const ws = `${new Date(p.pickupWindowStart).toLocaleString("ru-RU")}${
       p.pickupWindowEnd ? ` — ${new Date(p.pickupWindowEnd).toLocaleString("ru-RU")}` : ""
     }`;
-    row(`Окно выдачи: ${ws}`, LM, 10, GRAY);
+    ({ page, y } = drawParagraph(pdf, page, font, `Окно выдачи: ${ws}`, LM, y, 10, 470, 14, GRAY));
   }
-  if (p.pickupInstructions) row(`Инструкции: ${p.pickupInstructions.slice(0, 65)}`, LM, 10, GRAY);
+  if (p.pickupInstructions) {
+    ({ page, y } = drawParagraph(pdf, page, font, `Инструкции: ${p.pickupInstructions}`, LM, y, 10, 470, 14, GRAY));
+  }
   gap(0.5);
   hline();
 
@@ -112,8 +129,8 @@ export async function GET(_req, { params }) {
     colWidths: [200, 55, 55, 65, 80],
     headers: ["Наименование", "Ед.", "Кол-во", "Цена (руб.)", "Сумма (руб.)"],
     rows: order.items.map((item) => [
-      item.product.name.slice(0, 30),
-      (item.product.unit?.name ?? "шт").slice(0, 8),
+      item.product.name,
+      item.product.unit?.name ?? "шт",
       String(item.qty),
       item.price.toLocaleString("ru-RU"),
       (item.qty * item.price).toLocaleString("ru-RU"),
@@ -124,32 +141,35 @@ export async function GET(_req, { params }) {
   });
   page = tableResult.page;
   y = tableResult.y;
-  ({ page, y } = ensurePage(pdf, page, y, 80));
+  ({ page, y } = ensurePage(pdf, page, y, deliveryShare > 0 ? 100 : 84));
 
-  gap(0.5);
+  gap(1.4);
+  hline();
+  gap(0.7);
+
   // Totals
   if (deliveryShare > 0) {
-    rowRight(`Товары: ${goodsTotal.toLocaleString("ru-RU")} руб.`, 10);
-    rowRight(`Доставка: ${deliveryShare.toLocaleString("ru-RU")} руб.`, 10);
+    summaryRow("Товары", `${goodsTotal.toLocaleString("ru-RU")} руб.`, 10);
+    summaryRow("Доставка", `${deliveryShare.toLocaleString("ru-RU")} руб.`, 10);
   }
-  rowRight(`К оплате: ${grandTotal.toLocaleString("ru-RU")} руб.`, 12);
-  rowRight(`Статус оплаты: ${paymentLabel}`, 9, GRAY);
+  summaryRow("К оплате", `${grandTotal.toLocaleString("ru-RU")} руб.`, 12);
+  summaryRow("Статус оплаты", paymentLabel, 9, GRAY);
   gap(1.5);
   const ts = `Сформировано: ${new Date().toLocaleString("ru-RU")}`;
   page.drawText(ts, { x: RM - font.widthOfTextAtSize(ts, 7), y, size: 7, font, color: LGRAY });
 
   const bytes = await pdf.save();
-  const filename = `receipt_${order.id.slice(0, 8)}.pdf`;
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "PUBLIC",
-      actorLabel: String(session.email),
-      action: "EXPORT_DOC",
-      entityType: "ORDER",
-      entityId: order.procurementId,
-      meta: { orderId: order.id, doc: "receipt" },
-    },
+  await writeOrderAudit({
+    actorType: "PUBLIC",
+    actorLabel: String(session.email ?? order.participantName ?? "resident"),
+    action: "EXPORT_DOC",
+    orderId: order.id,
+    procurementId: order.procurementId,
+    meta: buildActorAuditMeta(session, {
+      type: "receipt_pdf",
+      filename,
+    }),
   });
 
   return toPdfResponse(bytes, filename);

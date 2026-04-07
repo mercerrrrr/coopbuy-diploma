@@ -2,6 +2,9 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { createCategory, deleteCategory, createUnit, deleteUnit } from "./actions";
 import { AddCategoryForm, AddUnitForm, DeleteDictItemButton } from "./ClientForms";
+import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function DictionariesPage() {
   const [categories, units] = await Promise.all([
@@ -16,87 +19,99 @@ export default async function DictionariesPage() {
   ]);
 
   return (
-    <main className="mx-auto max-w-3xl p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-900">
-          ← Главная
-        </Link>
-        <span className="text-zinc-300">|</span>
-        <h1 className="text-2xl font-semibold tracking-tight">Справочники</h1>
-      </div>
+    <main className="cb-shell space-y-4 py-1">
+      <PageHeader
+        eyebrow="Справочники"
+        title="Категории и единицы измерения"
+        description="Базовые справочники для карточек товаров, импорта и отчётных выгрузок."
+        actions={
+          <Link
+            href="/"
+            className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--cb-line)] bg-white px-3 py-2 text-sm text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
+          >
+            На главную
+          </Link>
+        }
+      />
 
-      {/* Categories */}
-      <section className="rounded-2xl border bg-white p-5 shadow-sm">
-        <div className="text-base font-semibold">Категории товаров</div>
-        <p className="mt-1 text-xs text-zinc-500">
-          Используются при создании товара и импорте прайс-листа.
-        </p>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Категории товаров</CardTitle>
+              <p className="mt-1 text-sm text-[color:var(--cb-text-soft)]">Используются в товарах и импорте.</p>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <AddCategoryForm action={createCategory} />
 
-        <AddCategoryForm action={createCategory} />
+            {categories.length === 0 ? (
+              <EmptyState className="px-0" title="Категорий пока нет" />
+            ) : (
+              <ul className="mt-4 divide-y divide-[color:var(--cb-line)] rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)]">
+                {categories.map((cat) => (
+                  <li
+                    key={cat.id}
+                    className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                  >
+                    <div>
+                      <span className="font-medium text-[color:var(--cb-text)]">{cat.name}</span>
+                      <span className="ml-2 text-xs text-[color:var(--cb-text-faint)]">
+                        {cat._count.products} товар(ов)
+                      </span>
+                    </div>
+                    {cat._count.products === 0 && (
+                      <DeleteDictItemButton
+                        id={cat.id}
+                        action={deleteCategory}
+                        label={cat.name}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
 
-        <ul className="mt-4 space-y-2">
-          {categories.length === 0 ? (
-            <li className="text-sm text-zinc-500">Пока нет категорий.</li>
-          ) : (
-            categories.map((cat) => (
-              <li
-                key={cat.id}
-                className="flex items-center justify-between rounded-xl border bg-zinc-50 px-4 py-3"
-              >
-                <div>
-                  <span className="font-medium">{cat.name}</span>
-                  <span className="ml-2 text-xs text-zinc-400">
-                    {cat._count.products} товар(ов)
-                  </span>
-                </div>
-                {cat._count.products === 0 && (
-                  <DeleteDictItemButton
-                    id={cat.id}
-                    action={deleteCategory}
-                    label={cat.name}
-                  />
-                )}
-              </li>
-            ))
-          )}
-        </ul>
-      </section>
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Единицы измерения</CardTitle>
+              <p className="mt-1 text-sm text-[color:var(--cb-text-soft)]">Используются в товарах и импорте.</p>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <AddUnitForm action={createUnit} />
 
-      {/* Units */}
-      <section className="rounded-2xl border bg-white p-5 shadow-sm">
-        <div className="text-base font-semibold">Единицы измерения</div>
-        <p className="mt-1 text-xs text-zinc-500">
-          Используются при создании товара и импорте прайс-листа.
-        </p>
-
-        <AddUnitForm action={createUnit} />
-
-        <ul className="mt-4 space-y-2">
-          {units.length === 0 ? (
-            <li className="text-sm text-zinc-500">Пока нет единиц измерения.</li>
-          ) : (
-            units.map((u) => (
-              <li
-                key={u.id}
-                className="flex items-center justify-between rounded-xl border bg-zinc-50 px-4 py-3"
-              >
-                <div>
-                  <span className="font-medium">{u.name}</span>
-                  <span className="ml-2 text-xs text-zinc-400">
-                    {u._count.products} товар(ов)
-                  </span>
-                </div>
-                {u._count.products === 0 && (
-                  <DeleteDictItemButton
-                    id={u.id}
-                    action={deleteUnit}
-                    label={u.name}
-                  />
-                )}
-              </li>
-            ))
-          )}
-        </ul>
+            {units.length === 0 ? (
+              <EmptyState className="px-0" title="Единиц пока нет" />
+            ) : (
+              <ul className="mt-4 divide-y divide-[color:var(--cb-line)] rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)]">
+                {units.map((u) => (
+                  <li
+                    key={u.id}
+                    className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                  >
+                    <div>
+                      <span className="font-medium text-[color:var(--cb-text)]">{u.name}</span>
+                      <span className="ml-2 text-xs text-[color:var(--cb-text-faint)]">
+                        {u._count.products} товар(ов)
+                      </span>
+                    </div>
+                    {u._count.products === 0 && (
+                      <DeleteDictItemButton
+                        id={u.id}
+                        action={deleteUnit}
+                        label={u.name}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
       </section>
     </main>
   );

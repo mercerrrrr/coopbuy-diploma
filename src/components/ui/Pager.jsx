@@ -1,15 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
-/**
- * Server-side pager that builds query-string links.
- *
- * Props:
- *   page        — current page number (1-based)
- *   totalPages  — total number of pages
- *   baseUrl     — pathname (e.g. "/admin/dashboard")
- *   query       — plain object of OTHER query params to preserve (optional)
- */
 export function Pager({ page, totalPages, baseUrl, query = {} }) {
   if (totalPages <= 1) return null;
 
@@ -20,40 +10,37 @@ export function Pager({ page, totalPages, baseUrl, query = {} }) {
 
   const hasPrev = page > 1;
   const hasNext = page < totalPages;
+  const buttonClass =
+    "inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm text-[color:var(--cb-text)] hover:bg-[color:var(--cb-bg-soft)]";
+  const disabledClass =
+    "inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3 py-2 text-sm text-[color:var(--cb-text-faint)]";
 
   return (
     <div className="flex items-center justify-center gap-2 py-2">
       {hasPrev ? (
-        <Link
-          href={href(page - 1)}
-          className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 shadow-sm transition-colors"
-        >
-          <ChevronLeft size={14} />
+        <Link href={href(page - 1)} className={buttonClass}>
           Назад
         </Link>
       ) : (
-        <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-300 cursor-not-allowed">
-          <ChevronLeft size={14} />
+        <span className={disabledClass}>
           Назад
         </span>
       )}
 
-      <span className="px-3 py-1.5 text-sm text-zinc-500">
+      <span
+        aria-current="page"
+        className="rounded-md border border-[color:var(--cb-line)] bg-white px-3 py-2 text-sm text-[color:var(--cb-text)]"
+      >
         {page} / {totalPages}
       </span>
 
       {hasNext ? (
-        <Link
-          href={href(page + 1)}
-          className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 shadow-sm transition-colors"
-        >
+        <Link href={href(page + 1)} className={buttonClass}>
           Вперёд
-          <ChevronRight size={14} />
         </Link>
       ) : (
-        <span className="inline-flex items-center gap-1 rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-300 cursor-not-allowed">
+        <span className={disabledClass}>
           Вперёд
-          <ChevronRight size={14} />
         </span>
       )}
     </div>

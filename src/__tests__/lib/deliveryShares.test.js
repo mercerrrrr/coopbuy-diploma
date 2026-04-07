@@ -5,6 +5,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 // и снаружи в тестах.
 const { mockPrisma } = vi.hoisted(() => {
   const mockPrisma = {
+    $transaction: vi.fn(async (operations) => Promise.all(operations)),
     procurement: { findUnique: vi.fn() },
     order: { findMany: vi.fn(), update: vi.fn() },
   };
@@ -23,6 +24,7 @@ function order(id, items) {
 describe("recalcDeliveryShares()", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(async (operations) => Promise.all(operations));
     mockPrisma.order.update.mockResolvedValue({});
   });
 

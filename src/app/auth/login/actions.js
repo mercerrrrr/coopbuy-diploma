@@ -10,13 +10,15 @@ import { headers } from "next/headers";
 import { loginSchema } from "@/lib/validation";
 import { isLimited, resetRateLimit } from "@/lib/rateLimit";
 import { firstZodError } from "@/lib/zodError";
+import { mergeGuestDraftOrdersIntoUser } from "@/lib/guestCart";
 
 async function writeAudit(action, actorLabel, entityId, actorType, meta) {
   try {
     await prisma.auditLog.create({
       data: { actorType, actorLabel, action, entityType: "USER", entityId, meta: meta ?? undefined },
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     // never break login UX on audit failure
   }
 }
@@ -55,6 +57,8 @@ export async function login(_prev, fd) {
   resetRateLimit(rateLimitKey);
   const actorType = user.role === "ADMIN" || user.role === "OPERATOR" ? "ADMIN" : "PUBLIC";
   await writeAudit("LOGIN_SUCCESS", email, user.id, actorType, null);
+
+  await mergeGuestDraftOrdersIntoUser(user.id);
 
   await setSessionCookie({
     sub: user.id,

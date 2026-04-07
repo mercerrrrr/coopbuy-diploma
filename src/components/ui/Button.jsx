@@ -1,18 +1,37 @@
-"use client";
-
 const VARIANTS = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-sm",
-  secondary: "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-50 active:bg-zinc-100 shadow-sm",
-  danger: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-sm",
-  ghost: "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-  success: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm",
+  primary:
+    "border border-[color:rgba(var(--cb-accent-rgb),0.18)] bg-[color:var(--cb-accent)] text-white hover:bg-[color:var(--cb-accent-strong)]",
+  secondary:
+    "border border-[color:var(--cb-line-strong)] bg-white text-[color:var(--cb-text)] hover:bg-[color:var(--cb-bg-soft)]",
+  danger: "border border-rose-200 bg-rose-600 text-white hover:bg-rose-700",
+  ghost:
+    "border border-transparent bg-transparent text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]",
+  success: "border border-emerald-200 bg-emerald-600 text-white hover:bg-emerald-700",
 };
 
 const SIZES = {
-  sm: "px-2.5 py-1.5 text-xs rounded-lg gap-1",
-  md: "px-3.5 py-2 text-sm rounded-xl gap-1.5",
-  lg: "px-5 py-2.5 text-base rounded-xl gap-2",
+  sm: "rounded-md px-3 py-2 text-xs gap-1.5 min-h-9",
+  md: "rounded-md px-3.5 py-2 text-sm gap-2 min-h-10",
+  lg: "rounded-md px-4 py-2.5 text-sm gap-2 min-h-11",
 };
+
+function LoadingGlyph() {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          className="h-1.5 w-1.5 rounded-full bg-current"
+          style={{
+            animation: "cb-pulse 1s ease-in-out infinite",
+            animationDelay: `${index * 120}ms`,
+            opacity: 0.38,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
 
 export function Button({
   variant = "primary",
@@ -21,24 +40,17 @@ export function Button({
   disabled = false,
   className = "",
   children,
+  type = "button",
   ...props
 }) {
   return (
     <button
-      className={`inline-flex items-center justify-center font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${VARIANTS[variant] ?? VARIANTS.primary} ${SIZES[size] ?? SIZES.md} ${className}`}
+      type={type}
+      className={`inline-flex items-center justify-center font-medium tracking-[-0.01em] disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant] ?? VARIANTS.primary} ${SIZES[size] ?? SIZES.md} ${className}`}
       disabled={disabled || loading}
       {...props}
     >
-      {loading && (
-        <svg
-          className="animate-spin h-3.5 w-3.5 shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-      )}
+      {loading && <LoadingGlyph />}
       {children}
     </button>
   );

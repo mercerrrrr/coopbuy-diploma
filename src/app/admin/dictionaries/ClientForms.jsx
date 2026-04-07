@@ -1,13 +1,15 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/Button";
+import { ActionButtonForm } from "@/components/ui/ActionForm";
 
 function Msg({ state }) {
   if (!state?.message) return null;
   return (
     <div
       className={[
-        "mt-2 rounded-xl border px-3 py-2 text-sm",
+        "mt-2 rounded-[0.95rem] border px-3 py-2 text-sm",
         state.ok
           ? "border-emerald-200 bg-emerald-50 text-emerald-900"
           : "border-red-200 bg-red-50 text-red-900",
@@ -26,11 +28,11 @@ export function AddCategoryForm({ action }) {
         <input
           name="name"
           placeholder="Название категории…"
-          className="flex-1 rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+          className="h-10 flex-1 rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm outline-none focus:border-[color:rgba(var(--cb-accent-rgb),0.34)]"
         />
-        <button className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+        <Button type="submit" size="md">
           Добавить
-        </button>
+        </Button>
       </form>
       <Msg state={state} />
     </div>
@@ -45,11 +47,11 @@ export function AddUnitForm({ action }) {
         <input
           name="name"
           placeholder="Единица измерения (шт, кг, л…)"
-          className="flex-1 rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
+          className="h-10 flex-1 rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm outline-none focus:border-[color:rgba(var(--cb-accent-rgb),0.34)]"
         />
-        <button className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800">
+        <Button type="submit" size="md">
           Добавить
-        </button>
+        </Button>
       </form>
       <Msg state={state} />
     </div>
@@ -58,16 +60,15 @@ export function AddUnitForm({ action }) {
 
 export function DeleteDictItemButton({ id, action, label = "Удалить" }) {
   return (
-    <form action={action}>
-      <input type="hidden" name="id" value={id} />
-      <button
-        className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-        onClick={(e) => {
-          if (!confirm(`Удалить "${label}"?`)) e.preventDefault();
-        }}
-      >
-        Удалить
-      </button>
-    </form>
+    <ActionButtonForm
+      action={action}
+      hiddenFields={{ id }}
+      label="Удалить"
+      pendingLabel="Удаляем..."
+      confirmText={`Удалить "${label}"?`}
+      variant="secondary"
+      size="sm"
+      buttonClassName="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+    />
   );
 }

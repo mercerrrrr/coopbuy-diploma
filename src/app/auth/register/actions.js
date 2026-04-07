@@ -10,6 +10,7 @@ import { headers } from "next/headers";
 import { registerSchema } from "@/lib/validation";
 import { isLimited } from "@/lib/rateLimit";
 import { firstZodError } from "@/lib/zodError";
+import { mergeGuestDraftOrdersIntoUser } from "@/lib/guestCart";
 
 export async function register(_prev, fd) {
   const rawEmail = str(fd, "email").toLowerCase();
@@ -47,6 +48,8 @@ export async function register(_prev, fd) {
       settlementId,
     },
   });
+
+  await mergeGuestDraftOrdersIntoUser(user.id);
 
   await setSessionCookie({
     sub: user.id,

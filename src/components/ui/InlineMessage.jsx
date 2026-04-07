@@ -1,14 +1,16 @@
 const STYLES = {
-  success: "bg-emerald-50 border-emerald-200 text-emerald-800",
-  error: "bg-red-50 border-red-200 text-red-700",
-  warning: "bg-amber-50 border-amber-200 text-amber-800",
-  info: "bg-sky-50 border-sky-200 text-sky-800",
-  neutral: "bg-zinc-50 border-zinc-200 text-zinc-700",
+  success: "border-emerald-200 bg-emerald-50/90 text-emerald-900",
+  error: "border-rose-200 bg-rose-50/92 text-rose-800",
+  warning: "border-amber-200 bg-amber-50/92 text-amber-900",
+  info: "border-sky-200 bg-sky-50/92 text-sky-900",
+  neutral: "border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] text-[color:var(--cb-text-soft)]",
 };
 
 export function InlineMessage({ type = "info", className = "", children }) {
   return (
-    <div className={`rounded-xl border px-4 py-3 text-sm ${STYLES[type] ?? STYLES.info} ${className}`}>
+    <div
+      className={`rounded-[0.8rem] border px-3.5 py-2.5 text-sm leading-6 ${STYLES[type] ?? STYLES.info} ${className}`}
+    >
       {children}
     </div>
   );

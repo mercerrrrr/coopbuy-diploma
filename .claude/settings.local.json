@@ -5,7 +5,8 @@
       "Bash(npx prisma format)",
       "Bash(npx prisma generate)",
       "Bash(npm run test:run)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(wc -l /d/VsCodeProjects/coopbuy-diploma/src/**/*.js /d/VsCodeProjects/coopbuy-diploma/src/**/*.jsx)"
     ]
   }
 }

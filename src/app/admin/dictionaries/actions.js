@@ -3,10 +3,12 @@
 import { prisma } from "@/lib/db";
 import { str, prismaNiceError } from "@/lib/formUtils";
 import { revalidatePath } from "next/cache";
+import { assertAdmin } from "@/lib/guards";
 
 // ── Category ──────────────────────────────────────────────
 
 export async function createCategory(_prev, fd) {
+  await assertAdmin();
   const name = str(fd, "name");
   if (!name) return { ok: false, message: "Название не может быть пустым." };
 
@@ -20,22 +22,25 @@ export async function createCategory(_prev, fd) {
   }
 }
 
-export async function deleteCategory(fd) {
+export async function deleteCategory(_prev, fd) {
+  await assertAdmin();
   const id = str(fd, "id");
-  if (!id) throw new Error("id не передан.");
+  if (!id) return { ok: false, message: "Не передана категория." };
 
   try {
     await prisma.category.delete({ where: { id } });
     revalidatePath("/admin/dictionaries");
+    return { ok: true, message: "Категория удалена." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }
 
 // ── Unit ──────────────────────────────────────────────────
 
 export async function createUnit(_prev, fd) {
+  await assertAdmin();
   const name = str(fd, "name");
   if (!name) return { ok: false, message: "Название не может быть пустым." };
 
@@ -49,15 +54,17 @@ export async function createUnit(_prev, fd) {
   }
 }
 
-export async function deleteUnit(fd) {
+export async function deleteUnit(_prev, fd) {
+  await assertAdmin();
   const id = str(fd, "id");
-  if (!id) throw new Error("id не передан.");
+  if (!id) return { ok: false, message: "Не передана единица измерения." };
 
   try {
     await prisma.unit.delete({ where: { id } });
     revalidatePath("/admin/dictionaries");
+    return { ok: true, message: "Единица измерения удалена." };
   } catch (e) {
     console.error(e);
-    throw new Error(prismaNiceError(e));
+    return { ok: false, message: prismaNiceError(e) };
   }
 }

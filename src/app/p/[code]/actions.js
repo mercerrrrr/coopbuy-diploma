@@ -1,87 +1,73 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
 import { str, num } from "@/lib/formUtils";
 import { revalidatePath } from "next/cache";
 import { recalcDeliveryShares } from "@/lib/deliveryShares";
 import { createNotification } from "@/lib/notifications";
 import { submitOrderSchema } from "@/lib/validation";
 import { firstZodError } from "@/lib/zodError";
+import {
+  getResidentProcurementAccessById,
+  canResidentParticipateInProcurement,
+} from "@/lib/guards";
+import { writeOrderAudit } from "@/lib/audit";
+import { redirect } from "next/navigation";
+import { getItemsGoodsTotal } from "@/lib/orders";
 
-async function getOrCreateGuestId() {
-  const cookieStore = await cookies();
-  const existing = cookieStore.get("cb_guest")?.value;
-  if (existing) return existing;
-  const guestId = crypto.randomUUID();
-  cookieStore.set("cb_guest", guestId, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-    path: "/",
-  });
-  return guestId;
-}
-
-async function getGuestId() {
-  const cookieStore = await cookies();
-  return cookieStore.get("cb_guest")?.value ?? null;
-}
-
-/**
- * Returns { userId } if RESIDENT session active, else { guestId }.
- * create=true: creates guestId cookie if needed.
- */
-async function getIdentity(create = false) {
-  const session = await getSession();
-  if (session?.sub) return { userId: String(session.sub) };
-  const guestId = create ? await getOrCreateGuestId() : await getGuestId();
-  return { guestId };
-}
-
-function orderWhere(procurementId, identity, status) {
+function orderWhere(procurementId, userId, status) {
   return {
     procurementId,
-    ...(identity.userId ? { userId: identity.userId } : { guestId: identity.guestId }),
+    userId,
     ...(status ? { status } : {}),
   };
 }
 
+function redirectToProcurement(code, message, flashType = "error") {
+  const params = new URLSearchParams();
+  params.set("flash", message);
+  params.set("flashType", flashType);
+  redirect(`/p/${code}?${params.toString()}`);
+}
+
 export async function addToCart(fd) {
+  const code = str(fd, "code");
   const procurementId = str(fd, "procurementId");
   const productId = str(fd, "productId");
   const qty = Math.trunc(num(fd, "qty"));
 
-  if (!procurementId) throw new Error("procurementId missing");
-  if (!productId) throw new Error("productId missing");
-  if (!Number.isFinite(qty) || qty <= 0) throw new Error("qty invalid");
-
-  const procurement = await prisma.procurement.findUnique({
-    where: { id: procurementId },
-    select: { status: true, supplierId: true, deadlineAt: true },
-  });
-  if (!procurement) throw new Error("Закупка не найдена.");
-  if (procurement.status !== "OPEN") throw new Error("Закупка уже недоступна для заказов.");
-  if (new Date() > procurement.deadlineAt) throw new Error("Дедлайн закупки истёк.");
-
-  const product = await prisma.product.findUnique({ where: { id: productId } });
-  if (!product) throw new Error("Товар не найден.");
-  if (product.supplierId !== procurement.supplierId) {
-    throw new Error("Товар не принадлежит поставщику данной закупки.");
+  if (!procurementId || !code) throw new Error("procurementId or code missing");
+  if (!productId) redirectToProcurement(code, "Товар не найден.");
+  if (!Number.isFinite(qty) || qty <= 0) {
+    redirectToProcurement(code, "Укажите корректное количество товара.");
   }
 
-  const identity = await getIdentity(true);
+  const { session, procurement, access } = await getResidentProcurementAccessById(procurementId, {
+    select: { id: true, status: true, supplierId: true, deadlineAt: true, settlementId: true, minTotalSum: true },
+  });
+  if (!procurement) redirectToProcurement(code, "Закупка не найдена.");
+  if (!canResidentParticipateInProcurement(access)) {
+    redirectToProcurement(code, access.message);
+  }
+
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) redirectToProcurement(code, "Товар не найден.");
+  if (product.supplierId !== procurement.supplierId) {
+    redirectToProcurement(code, "Товар не принадлежит поставщику этой закупки.");
+  }
+
+  const userId = String(session.sub);
 
   const submitted = await prisma.order.findFirst({
-    where: orderWhere(procurementId, identity, "SUBMITTED"),
+    where: orderWhere(procurementId, userId, "SUBMITTED"),
   });
-  if (submitted) throw new Error("Заявка уже оформлена. Редактирование недоступно.");
+  if (submitted) {
+    redirectToProcurement(code, "Заявка уже оформлена. Редактирование корзины недоступно.");
+  }
 
   await prisma.$transaction(async (tx) => {
     let order = await tx.order.findFirst({
-      where: orderWhere(procurementId, identity, "DRAFT"),
+      where: orderWhere(procurementId, userId, "DRAFT"),
     });
 
     if (!order) {
@@ -89,7 +75,7 @@ export async function addToCart(fd) {
         data: {
           procurementId,
           status: "DRAFT",
-          ...(identity.userId ? { userId: identity.userId } : { guestId: identity.guestId }),
+          userId,
         },
       });
     }
@@ -110,24 +96,29 @@ export async function addToCart(fd) {
     }
   });
 
-  revalidatePath(`/p/${str(fd, "code")}`);
+  revalidatePath(`/p/${code}`);
 }
 
 export async function removeFromCart(fd) {
   const itemId = str(fd, "itemId");
   const code = str(fd, "code");
-  const identity = await getIdentity(false);
+  if (!itemId || !code) throw new Error("itemId or code missing");
 
   const item = await prisma.orderItem.findUnique({
     where: { id: itemId },
-    include: { order: { select: { guestId: true, userId: true, status: true } } },
+    include: { order: { select: { userId: true, status: true, procurementId: true } } },
   });
-  if (!item) throw new Error("Позиция не найдена.");
-  if (item.order.status !== "DRAFT") throw new Error("Заказ уже оформлен.");
-  if (identity.userId) {
-    if (item.order.userId !== identity.userId) throw new Error("Нет доступа.");
-  } else {
-    if (item.order.guestId !== identity.guestId) throw new Error("Нет доступа.");
+  if (!item) redirectToProcurement(code, "Позиция корзины не найдена.");
+
+  const { session, access } = await getResidentProcurementAccessById(item.order.procurementId, {
+    select: { id: true, status: true, deadlineAt: true, settlementId: true, minTotalSum: true },
+  });
+  if (!canResidentParticipateInProcurement(access)) {
+    redirectToProcurement(code, access.message);
+  }
+  if (item.order.status !== "DRAFT") redirectToProcurement(code, "Заказ уже оформлен.");
+  if (item.order.userId !== String(session.sub)) {
+    redirectToProcurement(code, "Нельзя изменять чужую корзину.");
   }
 
   await prisma.orderItem.delete({ where: { id: itemId } });
@@ -137,18 +128,23 @@ export async function removeFromCart(fd) {
 export async function decreaseQty(fd) {
   const itemId = str(fd, "itemId");
   const code = str(fd, "code");
-  const identity = await getIdentity(false);
+  if (!itemId || !code) throw new Error("itemId or code missing");
 
   const item = await prisma.orderItem.findUnique({
     where: { id: itemId },
-    include: { order: { select: { guestId: true, userId: true, status: true } } },
+    include: { order: { select: { userId: true, status: true, procurementId: true } } },
   });
-  if (!item) throw new Error("Позиция не найдена.");
-  if (item.order.status !== "DRAFT") throw new Error("Заказ уже оформлен.");
-  if (identity.userId) {
-    if (item.order.userId !== identity.userId) throw new Error("Нет доступа.");
-  } else {
-    if (item.order.guestId !== identity.guestId) throw new Error("Нет доступа.");
+  if (!item) redirectToProcurement(code, "Позиция корзины не найдена.");
+
+  const { session, access } = await getResidentProcurementAccessById(item.order.procurementId, {
+    select: { id: true, status: true, deadlineAt: true, settlementId: true, minTotalSum: true },
+  });
+  if (!canResidentParticipateInProcurement(access)) {
+    redirectToProcurement(code, access.message);
+  }
+  if (item.order.status !== "DRAFT") redirectToProcurement(code, "Заказ уже оформлен.");
+  if (item.order.userId !== String(session.sub)) {
+    redirectToProcurement(code, "Нельзя изменять чужую корзину.");
   }
 
   if (item.qty <= 1) {
@@ -162,11 +158,17 @@ export async function decreaseQty(fd) {
 export async function clearCart(fd) {
   const procurementId = str(fd, "procurementId");
   const code = str(fd, "code");
-  const identity = await getIdentity(false);
-  if (!identity.userId && !identity.guestId) return;
+  if (!procurementId || !code) throw new Error("procurementId or code missing");
+
+  const { session, access } = await getResidentProcurementAccessById(procurementId, {
+    select: { id: true, status: true, deadlineAt: true, settlementId: true, minTotalSum: true },
+  });
+  if (!canResidentParticipateInProcurement(access)) {
+    redirectToProcurement(code, access.message);
+  }
 
   const order = await prisma.order.findFirst({
-    where: orderWhere(procurementId, identity, "DRAFT"),
+    where: orderWhere(procurementId, String(session.sub), "DRAFT"),
   });
   if (!order) return;
 
@@ -188,21 +190,15 @@ export async function submitOrder(_prev, fd) {
     return { ok: false, message: firstZodError(parse.error) };
   }
 
-  // Require RESIDENT auth
-  const session = await getSession();
-  if (!session) return { ok: false, message: "Необходимо войти в систему." };
-  if (session.role !== "RESIDENT")
-    return { ok: false, message: "Только участники могут оформлять заявки." };
-
-  const userId = String(session.sub);
-
-  const procurement = await prisma.procurement.findUnique({
-    where: { id: procurementId },
-    select: { status: true, deadlineAt: true },
+  const { session, procurement, access } = await getResidentProcurementAccessById(procurementId, {
+    select: { id: true, status: true, deadlineAt: true, settlementId: true, minTotalSum: true },
   });
   if (!procurement) return { ok: false, message: "Закупка не найдена." };
-  if (procurement.status !== "OPEN") return { ok: false, message: "Закупка закрыта." };
-  if (new Date() > procurement.deadlineAt) return { ok: false, message: "Дедлайн истёк." };
+  if (!canResidentParticipateInProcurement(access)) {
+    return { ok: false, message: access.message };
+  }
+
+  const userId = String(session.sub);
 
   const order = await prisma.order.findFirst({
     where: { procurementId, userId, status: "DRAFT" },
@@ -211,7 +207,7 @@ export async function submitOrder(_prev, fd) {
   if (!order) return { ok: false, message: "Корзина пуста или заявка уже оформлена." };
   if (order.items.length === 0) return { ok: false, message: "Корзина пуста." };
 
-  const goodsTotal = order.items.reduce((s, i) => s + i.qty * i.price, 0);
+  const goodsTotal = getItemsGoodsTotal(order.items);
 
   await prisma.order.update({
     where: { id: order.id },
@@ -226,15 +222,13 @@ export async function submitOrder(_prev, fd) {
   // Recalculate delivery shares for all SUBMITTED orders (including this one)
   await recalcDeliveryShares(procurementId);
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "PUBLIC",
-      actorLabel: String(session.email),
-      action: "SUBMIT_ORDER",
-      entityType: "ORDER",
-      entityId: procurementId,
-      meta: { orderId: order.id, participantName, userId, goodsTotal },
-    },
+  await writeOrderAudit({
+    actorType: "PUBLIC",
+    actorLabel: String(session.email),
+    action: "SUBMIT_ORDER",
+    orderId: order.id,
+    procurementId,
+    meta: { participantName, userId, goodsTotal },
   });
 
   // Notify the resident

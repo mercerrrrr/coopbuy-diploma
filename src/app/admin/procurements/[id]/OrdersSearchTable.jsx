@@ -1,20 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Badge } from "@/components/ui/Badge";
+import {
+  getAllowedPaymentStatusTransitions,
+  PAYMENT_LABELS,
+  PAYMENT_VARIANTS,
+} from "@/lib/constants";
+import { getOrderTotals } from "@/lib/orders";
 
-const PAYMENT_LABELS = {
-  UNPAID: "Не оплачено",
-  PAID: "Оплачено",
-  PAY_ON_PICKUP: "При выдаче",
+const PAYMENT_ACTION_STYLES = {
+  PAID: "rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-100 transition-colors",
+  PAY_ON_PICKUP:
+    "rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-800 hover:bg-sky-100 transition-colors",
+  UNPAID:
+    "rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-50 transition-colors",
 };
 
-const PAYMENT_VARIANTS = {
-  UNPAID: "danger",
-  PAID: "success",
-  PAY_ON_PICKUP: "info",
-};
+function PaymentTransitionButton({ status }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      name="paymentStatus"
+      value={status}
+      disabled={pending}
+      className={`${PAYMENT_ACTION_STYLES[status] ?? PAYMENT_ACTION_STYLES.UNPAID} disabled:opacity-50`}
+    >
+      {PAYMENT_LABELS[status] ?? status}
+    </button>
+  );
+}
+
+function PaymentStatusForm({ orderId, procurementId, currentStatus, action }) {
+  const [state, formAction] = useActionState(action, null);
+  const nextStatuses = getAllowedPaymentStatusTransitions(currentStatus);
+
+  if (nextStatuses.length === 0) {
+    return <span className="text-xs text-zinc-400">Изменение недоступно</span>;
+  }
+
+  return (
+    <div className="space-y-1">
+      <form action={formAction} className="flex gap-1 flex-wrap justify-end">
+        <input type="hidden" name="orderId" value={orderId} />
+        <input type="hidden" name="procurementId" value={procurementId} />
+        {nextStatuses.map((status) => (
+          <PaymentTransitionButton key={status} status={status} />
+        ))}
+      </form>
+      {state?.error && (
+        <p role="status" aria-live="polite" className="text-right text-xs text-red-600">
+          {state.error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus }) {
   const [query, setQuery] = useState("");
@@ -56,11 +100,7 @@ export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus }
             </thead>
             <tbody>
               {filtered.map((order, idx) => {
-                const gt =
-                  order.goodsTotal ??
-                  order.items.reduce((s, i) => s + i.qty * i.price, 0);
-                const ds = order.deliveryShare ?? 0;
-                const grand = order.grandTotal ?? gt;
+                const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
                 return (
                   <tr
                     key={order.id}
@@ -81,13 +121,13 @@ export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus }
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right text-zinc-700">
-                      {gt.toLocaleString("ru-RU")} ₽
+                      {goodsTotal.toLocaleString("ru-RU")} ₽
                     </td>
                     <td className="px-3 py-2.5 text-right text-zinc-500">
-                      {ds.toLocaleString("ru-RU")} ₽
+                      {deliveryShare.toLocaleString("ru-RU")} ₽
                     </td>
                     <td className="px-3 py-2.5 text-right font-semibold text-zinc-900">
-                      {grand.toLocaleString("ru-RU")} ₽
+                      {grandTotal.toLocaleString("ru-RU")} ₽
                     </td>
                     <td className="px-3 py-2.5">
                       <Badge variant={PAYMENT_VARIANTS[order.paymentStatus] ?? "neutral"}>
@@ -95,38 +135,12 @@ export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus }
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="flex gap-1 flex-wrap justify-end">
-                        {order.paymentStatus !== "PAID" && (
-                          <form action={updatePaymentStatus}>
-                            <input type="hidden" name="orderId" value={order.id} />
-                            <input type="hidden" name="procurementId" value={procurementId} />
-                            <input type="hidden" name="paymentStatus" value="PAID" />
-                            <button className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800 hover:bg-emerald-100 transition-colors">
-                              Оплачено
-                            </button>
-                          </form>
-                        )}
-                        {order.paymentStatus !== "PAY_ON_PICKUP" && (
-                          <form action={updatePaymentStatus}>
-                            <input type="hidden" name="orderId" value={order.id} />
-                            <input type="hidden" name="procurementId" value={procurementId} />
-                            <input type="hidden" name="paymentStatus" value="PAY_ON_PICKUP" />
-                            <button className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-800 hover:bg-sky-100 transition-colors">
-                              При выдаче
-                            </button>
-                          </form>
-                        )}
-                        {order.paymentStatus !== "UNPAID" && (
-                          <form action={updatePaymentStatus}>
-                            <input type="hidden" name="orderId" value={order.id} />
-                            <input type="hidden" name="procurementId" value={procurementId} />
-                            <input type="hidden" name="paymentStatus" value="UNPAID" />
-                            <button className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-50 transition-colors">
-                              Сбросить
-                            </button>
-                          </form>
-                        )}
-                      </div>
+                      <PaymentStatusForm
+                        orderId={order.id}
+                        procurementId={procurementId}
+                        currentStatus={order.paymentStatus}
+                        action={updatePaymentStatus}
+                      />
                     </td>
                   </tr>
                 );

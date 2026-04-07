@@ -1,20 +1,19 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 
 export function SearchInput({ value, onChange, placeholder = "Поиск...", className = "" }) {
   return (
-    <div className={`relative ${className}`}>
-      <Search
-        size={15}
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"
-      />
+    <div className={`group relative ${className}`}>
+      <span className="pointer-events-none absolute left-3 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center text-[color:var(--cb-text-faint)]">
+        <MagnifyingGlass size={14} weight="bold" />
+      </span>
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-zinc-300 bg-white py-2 pl-9 pr-4 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+        className="h-10 w-full rounded-md border border-[color:var(--cb-line-strong)] bg-white py-2 pl-9 pr-3 text-sm text-[color:var(--cb-text)] outline-none focus:border-[color:rgba(var(--cb-accent-rgb),0.34)] focus:ring-2 focus:ring-[rgba(var(--cb-accent-rgb),0.08)]"
       />
     </div>
   );

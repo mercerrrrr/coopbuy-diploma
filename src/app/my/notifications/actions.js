@@ -1,12 +1,11 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { assertResident } from "@/lib/guards";
 import { revalidatePath } from "next/cache";
 
 export async function markNotificationRead(fd) {
-  const session = await getSession();
-  if (!session) throw new Error("Unauthorized");
+  const session = await assertResident();
   const userId = String(session.sub);
 
   const notificationId = fd.get("notificationId");
@@ -22,8 +21,7 @@ export async function markNotificationRead(fd) {
 }
 
 export async function markAllNotificationsRead() {
-  const session = await getSession();
-  if (!session) throw new Error("Unauthorized");
+  const session = await assertResident();
   const userId = String(session.sub);
 
   await prisma.notification.updateMany({

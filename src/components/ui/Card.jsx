@@ -1,14 +1,20 @@
-export function Card({ className = "", children }) {
+export function Card({ className = "", children, ...props }) {
   return (
-    <div className={`rounded-2xl border border-zinc-200 bg-white shadow-sm ${className}`}>
+    <div
+      className={`overflow-hidden rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-panel-strong)] ${className}`}
+      {...props}
+    >
       {children}
     </div>
   );
 }
 
-export function CardHeader({ className = "", children }) {
+export function CardHeader({ className = "", children, ...props }) {
   return (
-    <div className={`flex items-center justify-between gap-3 px-5 py-4 border-b border-zinc-100 ${className}`}>
+    <div
+      className={`flex items-center justify-between gap-3 border-b border-[color:var(--cb-line)] px-4 py-3.5 md:px-5 ${className}`}
+      {...props}
+    >
       {children}
     </div>
   );
@@ -16,60 +22,68 @@ export function CardHeader({ className = "", children }) {
 
 export function CardTitle({ className = "", children }) {
   return (
-    <h2 className={`text-sm font-semibold text-zinc-900 ${className}`}>
+    <h2
+      className={`text-base font-semibold tracking-[-0.02em] text-[color:var(--cb-text)] ${className}`}
+    >
       {children}
     </h2>
   );
 }
 
-export function CardBody({ className = "", children }) {
+export function CardBody({ className = "", children, ...props }) {
   return (
-    <div className={`px-5 py-4 ${className}`}>
+    <div className={`px-4 py-4 md:px-5 ${className}`} {...props}>
       {children}
     </div>
   );
 }
 
 const STAT_VARIANTS = {
-  default: "bg-white border-zinc-200",
-  success: "bg-emerald-50 border-emerald-200",
-  danger: "bg-red-50 border-red-200",
-  warning: "bg-amber-50 border-amber-200",
-  info: "bg-sky-50 border-sky-200",
-  primary: "bg-indigo-50 border-indigo-200",
+  default: "border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)]",
+  success: "border-emerald-200 bg-emerald-50",
+  danger: "border-rose-200 bg-rose-50",
+  warning: "border-amber-200 bg-amber-50",
+  info: "border-sky-200 bg-sky-50",
+  primary: "border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent-soft)]",
 };
 
 const STAT_VALUE_VARIANTS = {
-  default: "text-zinc-900",
+  default: "text-[color:var(--cb-text)]",
   success: "text-emerald-800",
-  danger: "text-red-800",
+  danger: "text-rose-800",
   warning: "text-amber-800",
   info: "text-sky-800",
-  primary: "text-indigo-800",
+  primary: "text-[color:var(--cb-accent-strong)]",
 };
 
 const STAT_LABEL_VARIANTS = {
-  default: "text-zinc-500",
+  default: "text-[color:var(--cb-text-soft)]",
   success: "text-emerald-600",
-  danger: "text-red-500",
+  danger: "text-rose-500",
   warning: "text-amber-600",
   info: "text-sky-600",
-  primary: "text-indigo-600",
+  primary: "text-[color:var(--cb-accent)]",
 };
 
 export function StatCard({ label, value, sub, variant = "default", className = "" }) {
   return (
     <div
-      className={`rounded-xl border px-4 py-3 ${STAT_VARIANTS[variant] ?? STAT_VARIANTS.default} ${className}`}
+      className={`overflow-hidden rounded-[0.9rem] border px-3.5 py-3 ${STAT_VARIANTS[variant] ?? STAT_VARIANTS.default} ${className}`}
     >
-      <div className={`text-xs font-medium ${STAT_LABEL_VARIANTS[variant] ?? STAT_LABEL_VARIANTS.default}`}>
+      <div
+        className={`text-[0.64rem] font-semibold uppercase tracking-[0.14em] ${STAT_LABEL_VARIANTS[variant] ?? STAT_LABEL_VARIANTS.default}`}
+      >
         {label}
       </div>
-      <div className={`mt-1 text-2xl font-bold tracking-tight ${STAT_VALUE_VARIANTS[variant] ?? STAT_VALUE_VARIANTS.default}`}>
+      <div
+        className={`mt-1.5 text-xl font-semibold tracking-[-0.03em] tabular-nums ${STAT_VALUE_VARIANTS[variant] ?? STAT_VALUE_VARIANTS.default}`}
+      >
         {value}
       </div>
       {sub && (
-        <div className={`text-xs mt-0.5 ${STAT_LABEL_VARIANTS[variant] ?? STAT_LABEL_VARIANTS.default}`}>
+        <div
+          className={`mt-1 text-[0.72rem] ${STAT_LABEL_VARIANTS[variant] ?? STAT_LABEL_VARIANTS.default}`}
+        >
           {sub}
         </div>
       )}

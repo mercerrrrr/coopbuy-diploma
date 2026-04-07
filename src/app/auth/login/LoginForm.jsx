@@ -1,41 +1,61 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/Button";
+
+const fieldClassName =
+  "h-10 w-full rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm text-[color:var(--cb-text)] outline-none focus:border-[color:rgba(var(--cb-accent-rgb),0.34)]";
 
 export function LoginForm({ action, next }) {
   const [state, formAction, pending] = useActionState(action, null);
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form action={formAction} className="space-y-4">
       <input type="hidden" name="next" value={next} />
+
       {state?.error && (
-        <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-[0.95rem] border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-800"
+        >
           {state.error}
         </p>
       )}
-      <input
-        name="email"
-        type="email"
-        placeholder="Email"
-        required
-        autoComplete="email"
-        className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-      />
-      <input
-        name="password"
-        type="password"
-        placeholder="Пароль"
-        required
-        autoComplete="current-password"
-        className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
-      >
-        {pending ? "Вход…" : "Войти"}
-      </button>
+
+      <div className="grid gap-2">
+        <label htmlFor="login-email" className="text-sm font-medium text-[color:var(--cb-text)]">
+          Email
+        </label>
+        <input
+          id="login-email"
+          name="email"
+          type="email"
+          placeholder="name@domain.ru"
+          required
+          autoComplete="email"
+          className={fieldClassName}
+        />
+      </div>
+
+      <div className="grid gap-2">
+        <label htmlFor="login-password" className="text-sm font-medium text-[color:var(--cb-text)]">
+          Пароль
+        </label>
+        <input
+          id="login-password"
+          name="password"
+          type="password"
+          placeholder="Минимум 8 символов"
+          required
+          autoComplete="current-password"
+          className={fieldClassName}
+        />
+      </div>
+
+      <Button type="submit" loading={pending} className="w-full justify-center">
+        {pending ? "Проверяем доступ" : "Войти"}
+      </Button>
     </form>
   );
 }

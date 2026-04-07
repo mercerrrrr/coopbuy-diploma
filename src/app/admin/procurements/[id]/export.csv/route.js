@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/db";
+import { requireOperatorOrAdminRoute } from "@/lib/guards";
+import { buildActorAuditMeta, writeProcurementAudit } from "@/lib/audit";
+import { buildProcurementDocumentFilename } from "@/lib/exportDocuments";
 
 function csvEscape(value) {
   const s = String(value ?? "");
@@ -17,12 +20,15 @@ export async function GET(_req, { params }) {
 
   const procurement = await prisma.procurement.findUnique({
     where: { id },
-    select: { inviteCode: true, title: true },
+    select: { inviteCode: true, title: true, pickupPointId: true },
   });
 
   if (!procurement) {
     return new Response("Not found", { status: 404 });
   }
+
+  const { session, response } = await requireOperatorOrAdminRoute(procurement.pickupPointId);
+  if (response) return response;
 
   const orders = await prisma.order.findMany({
     where: { procurementId: id, status: "SUBMITTED" },
@@ -62,7 +68,20 @@ export async function GET(_req, { params }) {
 
   // BOM для корректного открытия в Excel
   const csv = "\uFEFF" + lines.join("\r\n");
-  const filename = `procurement_${procurement.inviteCode}_agg.csv`;
+  const filename = buildProcurementDocumentFilename(procurement.inviteCode, "agg", "csv");
+
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel: String(session.email ?? "admin"),
+    action: "EXPORT_DOC",
+    procurementId: id,
+    meta: buildActorAuditMeta(session, {
+      type: "export_csv",
+      rowCount: rows.length,
+      inviteCode: procurement.inviteCode,
+      filename,
+    }),
+  });
 
   return new Response(csv, {
     headers: {

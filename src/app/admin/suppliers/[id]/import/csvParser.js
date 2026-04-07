@@ -64,3 +64,28 @@ export function autoDetectMapping(headers) {
   }
   return mapping;
 }
+
+export const CSV_IMPORT_CLIENT_ERRORS = {
+  fileTooLarge: "Файл слишком большой (макс. 5 МБ).",
+  fileRead: "Ошибка чтения файла. Попробуйте ещё раз.",
+};
+
+export function buildClientPreviewState(text) {
+  const { headers, rows } = parseCSVText(text);
+  return {
+    preview: { headers, rows: rows.slice(0, 20), total: rows.length },
+    mapping: Object.fromEntries(
+      Object.entries(autoDetectMapping(headers)).map(([field, index]) => [field, String(index)])
+    ),
+  };
+}
+
+export function buildClientPreviewErrorState(
+  error = CSV_IMPORT_CLIENT_ERRORS.fileRead
+) {
+  return {
+    preview: null,
+    mapping: {},
+    error,
+  };
+}

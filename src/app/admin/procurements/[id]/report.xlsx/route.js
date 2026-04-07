@@ -1,20 +1,13 @@
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireOperatorOrAdminRoute } from "@/lib/guards";
+import { PAYMENT_LABELS, STATUS_LABELS } from "@/lib/constants";
+import { buildActorAuditMeta, writeProcurementAudit } from "@/lib/audit";
+import { buildProcurementDocumentFilename } from "@/lib/exportDocuments";
+import { getOrderTotals } from "@/lib/orders";
 import ExcelJS from "exceljs";
-
-const PAYMENT_LABELS = {
-  UNPAID: "Не оплачено",
-  PAID: "Оплачено",
-  PAY_ON_PICKUP: "При выдаче",
-};
 
 export async function GET(_req, { params }) {
   const { id } = await params;
-
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "OPERATOR")) {
-    return new Response("Unauthorized", { status: 401 });
-  }
 
   const procurement = await prisma.procurement.findUnique({
     where: { id },
@@ -26,6 +19,10 @@ export async function GET(_req, { params }) {
   });
   if (!procurement) return new Response("Not Found", { status: 404 });
 
+  const { session, response } = await requireOperatorOrAdminRoute(procurement.pickupPointId);
+  if (response) return response;
+  const filename = buildProcurementDocumentFilename(procurement.inviteCode, "report", "xlsx");
+
   const orders = await prisma.order.findMany({
     where: { procurementId: id, status: "SUBMITTED" },
     include: {
@@ -36,12 +33,12 @@ export async function GET(_req, { params }) {
   });
 
   // ── Aggregations ──────────────────────────────────────────
-  const goodsTotalSum = orders.reduce((s, o) => s + (o.goodsTotal ?? 0), 0);
-  const deliveryShareSum = orders.reduce((s, o) => s + (o.deliveryShare ?? 0), 0);
-  const grandTotalSum = orders.reduce((s, o) => s + (o.grandTotal ?? 0), 0);
-  const paidCount = orders.filter(
-    (o) => o.paymentStatus === "PAID" || o.paymentStatus === "PAY_ON_PICKUP"
-  ).length;
+  const totals = orders.map((order) => getOrderTotals(order));
+  const goodsTotalSum = totals.reduce((sum, order) => sum + order.goodsTotal, 0);
+  const deliveryShareSum = totals.reduce((sum, order) => sum + order.deliveryShare, 0);
+  const grandTotalSum = totals.reduce((sum, order) => sum + order.grandTotal, 0);
+  const paidCount = orders.filter((o) => o.paymentStatus === "PAID").length;
+  const payOnPickupCount = orders.filter((o) => o.paymentStatus === "PAY_ON_PICKUP").length;
   const unpaidCount = orders.filter((o) => o.paymentStatus === "UNPAID").length;
   const issuedCount = orders.filter((o) => o.checkin).length;
 
@@ -79,13 +76,14 @@ export async function GET(_req, { params }) {
     ["Поставщик", procurement.supplier.name],
     ["Населённый пункт", `${procurement.settlement.region.name}, ${procurement.settlement.name}`],
     ["Пункт выдачи", procurement.pickupPoint.name],
-    ["Статус", procurement.status],
+    ["Статус", STATUS_LABELS[procurement.status] ?? procurement.status],
     ["Дедлайн", new Date(procurement.deadlineAt).toLocaleString("ru-RU")],
     ["Всего заявок", orders.length],
     ["Сумма товаров, ₽", goodsTotalSum],
     ["Сумма доставки, ₽", deliveryShareSum],
     ["Итого, ₽", grandTotalSum],
     ["Оплачено", paidCount],
+    ["Оплата при выдаче", payOnPickupCount],
     ["Не оплачено", unpaidCount],
     ["Выдано", issuedCount],
     ["Не выдано", orders.length - issuedCount],
@@ -108,12 +106,13 @@ export async function GET(_req, { params }) {
   ];
   wsOrders.getRow(1).font = { bold: true };
   for (const order of orders) {
+    const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
     wsOrders.addRow({
       name: order.participantName ?? "",
       phone: order.participantPhone ?? "",
-      goodsTotal: order.goodsTotal ?? 0,
-      deliveryShare: order.deliveryShare ?? 0,
-      grandTotal: order.grandTotal ?? 0,
+      goodsTotal,
+      deliveryShare,
+      grandTotal,
       paymentStatus: PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus,
       paidAt: order.paidAt ? new Date(order.paidAt).toLocaleString("ru-RU") : "",
       issued: order.checkin ? "Да" : "Нет",
@@ -148,22 +147,24 @@ export async function GET(_req, { params }) {
 
   const buf = await wb.xlsx.writeBuffer();
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel: session.email,
-      action: "EXPORT_DOC",
-      entityType: "PROCUREMENT",
-      entityId: id,
-      meta: { type: "report_xlsx", orderCount: orders.length },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel: String(session.email ?? "admin"),
+    action: "EXPORT_DOC",
+    procurementId: id,
+    meta: buildActorAuditMeta(session, {
+      type: "report_xlsx",
+      orderCount: orders.length,
+      inviteCode: procurement.inviteCode,
+      filename,
+    }),
   });
 
   return new Response(buf, {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="report_${id.slice(0, 8)}.xlsx"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
 }

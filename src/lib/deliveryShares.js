@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { getItemsGoodsTotal } from "@/lib/orders";
 
 /**
  * Recomputes goodsTotal / deliveryShare / grandTotal for every SUBMITTED order
@@ -20,9 +21,7 @@ export async function recalcDeliveryShares(procurementId) {
   const fee = procurement.deliveryFee;
   const mode = procurement.deliverySplitMode;
 
-  const goodsTotals = orders.map((o) =>
-    o.items.reduce((s, i) => s + i.qty * i.price, 0)
-  );
+  const goodsTotals = orders.map((order) => getItemsGoodsTotal(order.items));
 
   let weights;
   if (mode === "EQUAL") {
@@ -46,7 +45,7 @@ export async function recalcDeliveryShares(procurementId) {
     shares[shares.length - 1] += diff;
   }
 
-  await Promise.all(
+  await prisma.$transaction(
     orders.map((o, i) =>
       prisma.order.update({
         where: { id: o.id },

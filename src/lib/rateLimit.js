@@ -6,6 +6,15 @@
 /** @type {Map<string, {count: number, resetAt: number}>} */
 const store = new Map();
 
+// Periodically evict expired entries to prevent unbounded memory growth.
+// Runs every 10 minutes; harmless in serverless (timer won't persist).
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of store) {
+    if (now > entry.resetAt) store.delete(key);
+  }
+}, 10 * 60 * 1000);
+
 /**
  * Check and increment the counter for a key.
  * Returns true if the limit is exceeded (request should be rejected).

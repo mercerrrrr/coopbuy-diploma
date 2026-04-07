@@ -1,15 +1,21 @@
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requireOperatorOrAdminRoute } from "@/lib/guards";
+import { buildActorAuditMeta, writeProcurementAudit } from "@/lib/audit";
+import { buildProcurementDocumentFilename } from "@/lib/exportDocuments";
 
 export async function GET(_req, { params }) {
   const { id } = await params;
 
   const procurement = await prisma.procurement.findUnique({
     where: { id },
-    select: { id: true, title: true, inviteCode: true },
+    select: { id: true, title: true, inviteCode: true, pickupPointId: true },
   });
   if (!procurement) return new Response("Not found", { status: 404 });
+
+  const { session, response } = await requireOperatorOrAdminRoute(procurement.pickupPointId);
+  if (response) return response;
+  const filename = buildProcurementDocumentFilename(procurement.inviteCode, "agg", "xlsx");
 
   const orders = await prisma.order.findMany({
     where: { procurementId: id, status: "SUBMITTED" },
@@ -72,23 +78,23 @@ export async function GET(_req, { params }) {
 
   const buffer = await workbook.xlsx.writeBuffer();
 
-  const session = await getSession();
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel: String(session?.email ?? "admin"),
-      action: "EXPORT_DOC",
-      entityType: "PROCUREMENT",
-      entityId: id,
-      meta: { type: "xlsx_agg", inviteCode: procurement.inviteCode },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel: String(session?.email ?? "admin"),
+    action: "EXPORT_DOC",
+    procurementId: id,
+    meta: buildActorAuditMeta(session, {
+      type: "export_xlsx",
+      inviteCode: procurement.inviteCode,
+      filename,
+    }),
   });
 
   return new Response(buffer, {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="procurement_${procurement.inviteCode}_agg.xlsx"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
 }

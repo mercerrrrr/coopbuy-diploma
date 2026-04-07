@@ -1,141 +1,57 @@
-# CoopBuy — Demo Runbook
+# CoopBuy — RUNBOOK
 
-## Быстрый старт
+## Официальный сценарий наполнения базы
+
+- Официальный seed path: `prisma/seed.js`
+- Официальный сценарий запуска seed: `npm run db:reset`
 
 ```bash
 npm install
-npm run db:reset:demo   # сброс БД + demo seed
-npm run dev             # http://localhost:3000
-```
-
----
-
-## Учётные записи
-
-### Базовый seed (`npx prisma db seed`)
-
-| Роль     | Email                | Пароль       | Доступ                                      |
-|----------|----------------------|--------------|---------------------------------------------|
-| ADMIN    | admin@local.test     | Admin123!    | Полный доступ                               |
-| OPERATOR | operator1@local.test | Operator123! | `/admin/procurements` своего пункта выдачи  |
-
-### Demo seed (`npm run db:reset:demo`)
-
-| Роль     | Email                   | Пароль       |
-|----------|-------------------------|--------------|
-| ADMIN    | admin@local.test        | Admin123!    |
-| OPERATOR | operator1@local.test    | Operator123! |
-| OPERATOR | operator2@local.test    | Operator123! |
-| RESIDENT | user1@local.test        | User123!     |
-| RESIDENT | user2@local.test        | User123!     |
-| RESIDENT | user3–6@local.test      | User123!     |
-
----
-
-## 10-минутный сценарий демо
-
-### 1. ADMIN — Дашборд и отчёты (~2 мин)
-1. Войти как `admin@local.test / Admin123!`
-2. Открыть **`/admin/dashboard`** → видны карточки по закупкам: статистика оплат, прогресс
-3. Открыть **`/admin/procurements`** → список закупок
-4. Кликнуть на **«Демо-закупка №3 (завершена)»** → страница деталей
-5. Нажать **«Отчёт»** → `/admin/procurements/[id]/report` (KPI, топ-товары)
-6. Скачать **report.pdf** и **report.xlsx**
-7. Скачать **payments.xlsx** — реестр оплат участников
-
-**Ожидается:** PDF/XLSX скачиваются, данные заполнены.
-
----
-
-### 2. RESIDENT — Просмотр закупки и submit (~2 мин)
-1. Войти как `user1@local.test / User123!`
-2. Открыть **`/my/procurements`** → видны открытые закупки
-3. Нажать **«Перейти к закупке»** на «Демо-закупка №1»
-4. Добавить товары в корзину → нажать **«Оформить заявку»**
-5. Открыть **`/my/orders`** → заявка со статусом SUBMITTED
-6. Кликнуть на заявку → видны QR-код и кнопка **«Скачать квитанцию (PDF)»**
-
-**Ожидается:** Заявка создана, QR и PDF доступны.
-
----
-
-### 3. OPERATOR — Выдача заказа (~2 мин)
-1. Войти как `operator1@local.test / Operator123!`
-2. Открыть **`/admin/procurements`** → видна своя закупка
-3. Открыть деталь закупки → секция **«Выдача»**
-4. Создать сессию выдачи (если нет) → **«Начать выдачу»**
-5. В поле ввода вставить **orderId** нужного заказа → нажать **«Выдать»**
-6. Статус заказа меняется на **«Выдано»**
-
-**Ожидается:** checkin создан, запись в списке выдачи.
-
----
-
-### 4. RESIDENT — Статус «Выдано» и уведомления (~2 мин)
-1. Вернуться под `user1@local.test`
-2. Открыть **`/my/orders`** → заказ со статусом **Выдано**
-3. Открыть **`/my/notifications`** → список уведомлений (PROCUREMENT_CREATED, ORDER_SUBMITTED, PAYMENT_STATUS_CHANGED)
-4. Нажать **«Отметить все как прочитанные»** → badge на навбаре исчезает
-
-**Ожидается:** статус обновлён, уведомления читаются.
-
----
-
-### 5. ADMIN — Экспорты и импорт (~2 мин)
-1. Открыть **`/admin/suppliers`** → список поставщиков (4 активных, 1 неактивный)
-2. Зайти в поставщика → вкладка продуктов → экспорт CSV/XLSX
-3. Открыть **`/admin/dictionaries`** → управление категориями и единицами
-
-**Ожидается:** все разделы работают без ошибок.
-
----
-
-## URL по ролям
-
-| Путь | Роль |
-|------|------|
-| `/admin/dashboard` | ADMIN, OPERATOR |
-| `/admin/procurements` | ADMIN, OPERATOR |
-| `/admin/procurements/[id]` | ADMIN, OPERATOR |
-| `/admin/procurements/[id]/report` | ADMIN |
-| `/admin/procurements/[id]/report.pdf` | ADMIN |
-| `/admin/procurements/[id]/report.xlsx` | ADMIN |
-| `/admin/procurements/[id]/payments.xlsx` | ADMIN |
-| `/admin/suppliers` | ADMIN |
-| `/admin/dictionaries` | ADMIN |
-| `/my/procurements` | RESIDENT |
-| `/my/orders` | RESIDENT |
-| `/my/orders/[id]` | RESIDENT (QR + receipt.pdf) |
-| `/my/notifications` | RESIDENT |
-| `/p/[code]` | все (публичная корзина) |
-| `/auth/login` | все |
-
----
-
-## Команды
-
-```bash
-# Первичный запуск
-npm install
-npm run db:reset:demo
-
-# Повторный сброс данных (без удаления схемы)
-npm run seed:demo
-
-# Запуск dev-сервера
+npm run db:reset
 npm run dev
 ```
 
----
+Приложение поднимается на `http://localhost:3000`.
 
-## Чек-лист после seed
+## Пилотный сценарий
 
-- [ ] Создано 5 регионов, 7 населённых пунктов, 7 пунктов выдачи
-- [ ] Создано 5 категорий, 5 единиц, 5 поставщиков, 20 продуктов
-- [ ] Создано 3 закупки (2 OPEN, 1 CLOSED)
-- [ ] Создано 6+ SUBMITTED заказов с позициями и goodsTotal/grandTotal
-- [ ] 3 заказа имеют PickupCheckin (выдано)
-- [ ] У каждого RESIDENT есть 3 уведомления
-- [ ] Создан ReceivingReport с 2 строками (1 с расхождением)
-- [ ] Создано ≥10 записей AuditLog
-- [ ] Все учётные записи из таблицы выше работают
+- Демо-данные ориентированы на один пилотный регион.
+- Основной пользовательский выбор идёт через населённый пункт (`Settlement`).
+- Архитектура остаётся масштабируемой: `Region`, `Settlement`, `PickupPoint`, `SupplierDeliveryZone` уже позволяют расширение на несколько регионов.
+
+## Учётные записи после `npm run db:reset`
+
+| Роль | Email | Пароль | Назначение |
+| --- | --- | --- | --- |
+| ADMIN | `admin@local.test` | `Admin123!` | Полный административный доступ |
+| OPERATOR | `operator1@local.test` | `Operator123!` | Работа со своим пунктом выдачи |
+| RESIDENT | `user1@local.test` | `User123!` | Житель settlement №1 |
+| RESIDENT | `user2@local.test` | `User123!` | Житель settlement №1 |
+| RESIDENT | `user3@local.test` | `User123!` | Житель settlement №2 |
+
+## Что проверить после seed
+
+- Авторизация работает по `email + password`.
+- Администратор видит `/admin/users` и может создать `OPERATOR` и `RESIDENT`.
+- Жители видят закупки только своего населённого пункта в `/my/procurements`.
+- Страница `/p/[code]` открывается всем по ссылке, но участие доступно только авторизованному `RESIDENT` с совпадающим `settlementId`.
+- Страница `/my/orders/[orderId]` используется как основная квитанция, а PDF остаётся дополнительным экспортом.
+- Для завершённой закупки доступны `report.pdf`, `report.xlsx`, `payments.xlsx`, `export.csv`, `export.pdf`, `export.xlsx`, `receiving.csv`, `receiving.xlsx`.
+
+## Краткий smoke-сценарий
+
+1. Выполнить `npm run db:reset`.
+2. Войти как `admin@local.test / Admin123!`.
+3. Открыть `/admin/users` и создать одного `OPERATOR` и одного `RESIDENT`.
+4. Открыть `/admin/procurements` и убедиться, что форма создания визуально разделена на основные поля и дополнительные настройки.
+5. Войти как `user1@local.test / User123!` и проверить `/my/procurements`, `/my/orders`, `/my/orders/[orderId]`, `/my/notifications`.
+6. Открыть чужую закупку под жителем другого settlement и убедиться, что доступ остаётся только на просмотр.
+
+## Чек-лист
+
+- [ ] Seed запускается официально через `npm run db:reset`
+- [ ] Используется только `prisma/seed.js` как официальный seed path
+- [ ] Seed поднимает один пилотный регион и несколько settlement
+- [ ] Есть открытые и закрытая закупки
+- [ ] Есть подтверждённые заказы, оплаты, выдача и акт приёмки
+- [ ] Документация и поведение приложения соответствуют `docs/IMPLEMENTATION_ALIGNMENT.md`

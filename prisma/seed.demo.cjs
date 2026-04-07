@@ -1,7 +1,8 @@
 /**
- * prisma/seed.demo.cjs — Demo dataset seed
+ * prisma/seed.demo.cjs — historical demo dataset.
+ * Official seed path for the project is `prisma/seed.js`.
+ * Official fill scenario is `npm run db:reset`.
  * Idempotent: clears demo-tagged data first, then re-creates.
- * Run: node prisma/seed.demo.cjs
  */
 require("dotenv/config");
 
@@ -404,10 +405,10 @@ async function main() {
       { actorType: "ADMIN", actorLabel: "admin@local.test", action: "CLOSE_PROCUREMENT",  entityType: "PROCUREMENT", entityId: procurements[2].id, meta: {} },
       { actorType: "ADMIN", actorLabel: "admin@local.test", action: "UPDATE_DELIVERY_SETTINGS", entityType: "PROCUREMENT", entityId: procurements[0].id, meta: { deliveryFee: 1200 } },
       { actorType: "ADMIN", actorLabel: "admin@local.test", action: "EXPORT_DOC",         entityType: "PROCUREMENT", entityId: procurements[2].id, meta: { type: "payments_xlsx" } },
-      { actorType: "PUBLIC", actorLabel: "user1@local.test", action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[0]?.id ?? "demo", meta: {} },
-      { actorType: "PUBLIC", actorLabel: "user2@local.test", action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[1]?.id ?? "demo", meta: {} },
-      { actorType: "ADMIN", actorLabel: "operator1@local.test", action: "CHECKIN_ORDER",  entityType: "ORDER",       entityId: orders[0]?.id ?? "demo", meta: {} },
-      { actorType: "ADMIN", actorLabel: "admin@local.test", action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",   entityId: orders[0]?.id ?? "demo", meta: { paymentStatus: "PAID" } },
+      { actorType: "PUBLIC", actorLabel: "user1@local.test", action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[0]?.id ?? "demo", meta: { procurementId: procurements[0].id } },
+      { actorType: "PUBLIC", actorLabel: "user2@local.test", action: "SUBMIT_ORDER",       entityType: "ORDER",       entityId: orders[1]?.id ?? "demo", meta: { procurementId: procurements[0].id } },
+      { actorType: "ADMIN", actorLabel: "operator1@local.test", action: "CHECKIN_ORDER",  entityType: "PROCUREMENT", entityId: procurements[0].id, meta: { orderId: orders[0]?.id ?? "demo" } },
+      { actorType: "ADMIN", actorLabel: "admin@local.test", action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",   entityId: orders[0]?.id ?? "demo", meta: { procurementId: procurements[0].id, paymentStatus: "PAID" } },
       { actorType: "ADMIN", actorLabel: "admin@local.test", action: "RECALC_DELIVERY_SHARES", entityType: "PROCUREMENT", entityId: procurements[0].id, meta: {} },
     ];
     await prisma.auditLog.createMany({ data: auditEntries });

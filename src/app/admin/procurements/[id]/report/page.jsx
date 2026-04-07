@@ -2,25 +2,17 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { requireAccessibleProcurement } from "@/lib/guards";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard, Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pager } from "@/components/ui/Pager";
-import { ChevronRight, FileSpreadsheet, FileText, BarChart2 } from "lucide-react";
-
+import { PageHeader } from "@/components/ui/PageHeader";
+import { autoCloseExpiredProcurements } from "@/lib/procurements/autoCloseExpired";
+import { getProcurementState } from "@/lib/procurements/state";
+import { PAYMENT_LABELS, PAYMENT_VARIANTS } from "@/lib/constants";
+import { getOrderTotals } from "@/lib/orders";
 const ORDERS_PAGE_SIZE = 20;
-
-const PAYMENT_LABELS = {
-  UNPAID: "Не оплачено",
-  PAID: "Оплачено",
-  PAY_ON_PICKUP: "При выдаче",
-};
-
-const PAYMENT_VARIANTS = {
-  UNPAID: "danger",
-  PAID: "success",
-  PAY_ON_PICKUP: "info",
-};
 
 export default async function ProcurementReportPage({ params, searchParams }) {
   const { id } = await params;
@@ -29,15 +21,20 @@ export default async function ProcurementReportPage({ params, searchParams }) {
   if (!session || (session.role !== "ADMIN" && session.role !== "OPERATOR")) {
     redirect("/auth/login");
   }
+  await autoCloseExpiredProcurements(prisma);
 
-  const procurement = await prisma.procurement.findUnique({
-    where: { id },
-    include: {
-      supplier: true,
-      settlement: { include: { region: true } },
-      pickupPoint: true,
-    },
-  });
+  let procurement = null;
+  try {
+    ({ procurement } = await requireAccessibleProcurement(id, {
+      include: {
+        supplier: true,
+        settlement: { include: { region: true } },
+        pickupPoint: true,
+      },
+    }));
+  } catch {
+    notFound();
+  }
   if (!procurement) notFound();
 
   const sp = await searchParams;
@@ -84,13 +81,15 @@ export default async function ProcurementReportPage({ params, searchParams }) {
 
   const totalPages = Math.max(1, Math.ceil(ordersTotal / ORDERS_PAGE_SIZE));
 
-  // ── Summary aggregations (over ALL orders) ────────────────────────────────
+  const allOrderTotals = allOrders.map((order) => getOrderTotals(order));
+  const submittedTotal = allOrderTotals.reduce((sum, order) => sum + order.goodsTotal, 0);
+  const procurementState = getProcurementState(procurement, submittedTotal);
+
   const totalOrders = allOrders.length;
   const uniqueResidents = new Set(allOrders.map((o) => o.userId).filter(Boolean)).size;
-
-  const goodsTotalSum = allOrders.reduce((s, o) => s + (o.goodsTotal ?? 0), 0);
-  const deliveryShareSum = allOrders.reduce((s, o) => s + (o.deliveryShare ?? 0), 0);
-  const grandTotalSum = allOrders.reduce((s, o) => s + (o.grandTotal ?? 0), 0);
+  const goodsTotalSum = allOrderTotals.reduce((sum, order) => sum + order.goodsTotal, 0);
+  const deliveryShareSum = allOrderTotals.reduce((sum, order) => sum + order.deliveryShare, 0);
+  const grandTotalSum = allOrderTotals.reduce((sum, order) => sum + order.grandTotal, 0);
 
   const paymentBreakdown = {
     UNPAID: allOrders.filter((o) => o.paymentStatus === "UNPAID").length,
@@ -151,56 +150,47 @@ export default async function ProcurementReportPage({ params, searchParams }) {
   if (search) preservedQuery.search = search;
 
   return (
-    <main className="mx-auto max-w-5xl p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <nav className="flex items-center gap-1.5 text-xs text-zinc-400 mb-2">
-          <Link href="/admin/procurements" className="hover:text-zinc-700 transition-colors">
-            Закупки
-          </Link>
-          <ChevronRight size={12} />
-          <Link
-            href={`/admin/procurements/${id}`}
-            className="hover:text-zinc-700 transition-colors"
-          >
-            {procurement.title}
-          </Link>
-          <ChevronRight size={12} />
-          <span className="text-zinc-600 font-medium">Отчёт</span>
-        </nav>
+    <main className="cb-shell space-y-4 py-1">
+      <div className="text-xs text-[color:var(--cb-text-faint)]">
+        <Link href="/admin/procurements" className="hover:text-[color:var(--cb-text)]">
+          Закупки
+        </Link>{" "}
+        /{" "}
+        <Link href={`/admin/procurements/${id}`} className="hover:text-[color:var(--cb-text)]">
+          {procurement.title}
+        </Link>{" "}
+        / <span className="font-medium text-[color:var(--cb-text-soft)]">Отчёт</span>
+      </div>
 
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <BarChart2 size={18} className="text-indigo-500" />
-              <h1 className="text-xl font-bold text-zinc-900">Отчёт по закупке</h1>
-            </div>
-            <p className="text-sm text-zinc-500">
-              {procurement.supplier.name} ·{" "}
-              {procurement.settlement.region.name}, {procurement.settlement.name} ·{" "}
-              {procurement.pickupPoint.name}
-            </p>
-          </div>
-
-          {/* Export buttons */}
-          <div className="flex flex-wrap gap-2">
+      <PageHeader
+        eyebrow="Операционный центр / отчёт"
+        title="Отчёт по закупке"
+        description={`${procurement.supplier.name} · ${procurement.settlement.region.name}, ${procurement.settlement.name} · ${procurement.pickupPoint.name}`}
+        actions={
+          <>
             <Link
               href={`/admin/procurements/${id}/report.xlsx`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 shadow-sm transition-colors"
+              className="inline-flex min-h-9 items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
             >
-              <FileSpreadsheet size={14} />
               XLSX
             </Link>
             <Link
               href={`/admin/procurements/${id}/report.pdf`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 shadow-sm transition-colors"
+              className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm font-medium text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
             >
-              <FileText size={14} />
               PDF
             </Link>
-          </div>
+          </>
+        }
+      />
+
+      {procurementState.closedBecauseMinNotReached && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Минимальная сумма не достигнута: собрано {submittedTotal.toLocaleString("ru-RU")} ₽ из{" "}
+          {procurement.minTotalSum.toLocaleString("ru-RU")} ₽. Закупка закрыта и находится в
+          архиве.
         </div>
-      </div>
+      )}
 
       {totalOrders === 0 && !filterStatus && !search && (
         <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -267,7 +257,7 @@ export default async function ProcurementReportPage({ params, searchParams }) {
               />
               <StatCard
                 variant="info"
-                label="При выдаче"
+                label={PAYMENT_LABELS.PAY_ON_PICKUP}
                 value={paymentBreakdown.PAY_ON_PICKUP}
               />
             </div>
@@ -286,9 +276,9 @@ export default async function ProcurementReportPage({ params, searchParams }) {
               <div className="flex gap-1.5 flex-wrap">
                 {[
                   { label: "Все", value: "" },
-                  { label: "Не оплачено", value: "UNPAID" },
-                  { label: "Оплачено", value: "PAID" },
-                  { label: "При выдаче", value: "PAY_ON_PICKUP" },
+                  { label: PAYMENT_LABELS.UNPAID, value: "UNPAID" },
+                  { label: PAYMENT_LABELS.PAID, value: "PAID" },
+                  { label: PAYMENT_LABELS.PAY_ON_PICKUP, value: "PAY_ON_PICKUP" },
                 ].map((opt) => (
                   <Link
                     key={opt.value}
@@ -353,44 +343,49 @@ export default async function ProcurementReportPage({ params, searchParams }) {
                   </thead>
                   <tbody>
                     {ordersPage.map((order, idx) => (
-                      <tr
-                        key={order.id}
-                        className={[
-                          "border-b last:border-0 transition-colors",
-                          idx % 2 === 0 ? "bg-white" : "bg-zinc-50/40",
-                          "hover:bg-indigo-50/20",
-                        ].join(" ")}
-                      >
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-zinc-900">
-                            {order.participantName ?? "—"}
-                          </div>
-                          {order.participantPhone && (
-                            <div className="text-xs text-zinc-400">{order.participantPhone}</div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right text-zinc-700">
-                          {(order.goodsTotal ?? 0).toLocaleString("ru-RU")}
-                        </td>
-                        <td className="px-4 py-3 text-right text-zinc-500">
-                          {(order.deliveryShare ?? 0).toLocaleString("ru-RU")}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-zinc-900">
-                          {(order.grandTotal ?? 0).toLocaleString("ru-RU")}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant={PAYMENT_VARIANTS[order.paymentStatus] ?? "neutral"}>
-                            {PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          {order.checkin ? (
-                            <Badge variant="success">Выдан</Badge>
-                          ) : (
-                            <Badge variant="neutral">Ожидает</Badge>
-                          )}
-                        </td>
-                      </tr>
+                      (() => {
+                        const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
+                        return (
+                          <tr
+                            key={order.id}
+                            className={[
+                              "border-b last:border-0 transition-colors",
+                              idx % 2 === 0 ? "bg-white" : "bg-zinc-50/40",
+                              "hover:bg-indigo-50/20",
+                            ].join(" ")}
+                          >
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-zinc-900">
+                                {order.participantName ?? "—"}
+                              </div>
+                              {order.participantPhone && (
+                                <div className="text-xs text-zinc-400">{order.participantPhone}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right text-zinc-700">
+                              {goodsTotal.toLocaleString("ru-RU")}
+                            </td>
+                            <td className="px-4 py-3 text-right text-zinc-500">
+                              {deliveryShare.toLocaleString("ru-RU")}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-zinc-900">
+                              {grandTotal.toLocaleString("ru-RU")}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge variant={PAYMENT_VARIANTS[order.paymentStatus] ?? "neutral"}>
+                                {PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              {order.checkin ? (
+                                <Badge variant="success">Выдан</Badge>
+                              ) : (
+                                <Badge variant="neutral">Ожидает</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })()
                     ))}
                   </tbody>
                 </table>

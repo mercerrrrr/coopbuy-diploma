@@ -3,6 +3,11 @@
 import { useState, useActionState } from "react";
 import Link from "next/link";
 import { createDraftBatch, applyBatch } from "./actions";
+import {
+  buildClientPreviewErrorState,
+  buildClientPreviewState,
+  CSV_IMPORT_CLIENT_ERRORS,
+} from "./csvParser";
 
 const REQUIRED_FIELDS = ["name", "category", "unit", "price"];
 const OPTIONAL_FIELDS = ["sku", "imageUrl"];
@@ -17,70 +22,16 @@ const FIELD_LABELS = {
   imageUrl: "Картинка (URL)",
 };
 
-const FIELD_ALIASES = {
-  name:     ["name", "название", "наименование", "товар", "product"],
-  category: ["category", "категория", "кат", "раздел"],
-  unit:     ["unit", "ед", "единица"],
-  price:    ["price", "цена", "стоимость", "прайс"],
-  sku:      ["sku", "артикул", "арт", "код"],
-  imageUrl: ["imageurl", "image", "картинка", "фото"],
-};
-
-function detectMappingClient(headers) {
-  const mapping = {};
-  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
-    for (let i = 0; i < headers.length; i++) {
-      const h = headers[i].toLowerCase().replace(/[\s.]/g, "");
-      if (aliases.some((a) => h === a || h.startsWith(a))) {
-        if (!(field in mapping)) mapping[field] = String(i);
-        break;
-      }
-    }
-  }
-  return mapping;
-}
-
-function detectDelim(firstLine) {
-  const sc = (firstLine.match(/;/g) || []).length;
-  const cm = (firstLine.match(/,/g) || []).length;
-  return sc >= cm ? ";" : ",";
-}
-
-function parseLineClient(line, delim) {
-  const result = [];
-  let field = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { field += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (ch === delim && !inQuotes) {
-      result.push(field.trim());
-      field = "";
-    } else {
-      field += ch;
-    }
-  }
-  result.push(field.trim());
-  return result;
-}
-
-function parseCSVClient(text) {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (!lines.length) return { headers: [], rows: [] };
-  const delim = detectDelim(lines[0]);
-  const headers = parseLineClient(lines[0], delim);
-  const rows = lines.slice(1).map((l) => parseLineClient(l, delim));
-  return { headers, rows };
-}
-
 // ── Phase 3: Applied ──────────────────────────────────────
 
 function AppliedView({ result }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border bg-emerald-50 border-emerald-200 p-5 shadow-sm space-y-4">
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-2xl border bg-emerald-50 border-emerald-200 p-5 shadow-sm space-y-4"
+      >
         <div className="text-sm font-semibold text-emerald-800">
           Импорт применён: {result.fileName}
         </div>
@@ -144,7 +95,11 @@ function DraftView({ draftResult, applyAction, isApplyPending, applyError }) {
         )}
 
         {applyError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          >
             {applyError}
           </div>
         )}
@@ -180,6 +135,7 @@ function DraftView({ draftResult, applyAction, isApplyPending, applyError }) {
 export function CsvImportClient({ supplierId }) {
   const [preview, setPreview] = useState(null);
   const [mapping, setMapping] = useState({});
+  const [clientError, setClientError] = useState(null);
 
   const [draftResult, draftAction, isDraftPending] = useActionState(createDraftBatch, null);
   const [applyResult, applyAction, isApplyPending] = useActionState(applyBatch, null);
@@ -202,16 +158,38 @@ export function CsvImportClient({ supplierId }) {
   // Phase 1: upload form
   function handleFileChange(e) {
     const file = e.target.files?.[0];
-    if (!file) { setPreview(null); setMapping({}); return; }
+    if (!file) {
+      setPreview(null);
+      setMapping({});
+      setClientError(null);
+      return;
+    }
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+    if (file.size > MAX_SIZE) {
+      const errorState = buildClientPreviewErrorState(CSV_IMPORT_CLIENT_ERRORS.fileTooLarge);
+      setPreview(errorState.preview);
+      setMapping(errorState.mapping);
+      setClientError(errorState.error);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target.result;
-      const { headers, rows } = parseCSVClient(text);
-      setPreview({ headers, rows: rows.slice(0, 20), total: rows.length });
-      setMapping(detectMappingClient(headers));
+      const text = typeof ev.target?.result === "string" ? ev.target.result : "";
+      const nextState = buildClientPreviewState(text);
+      setPreview(nextState.preview);
+      setMapping(nextState.mapping);
+      setClientError(null);
+    };
+    reader.onerror = () => {
+      const errorState = buildClientPreviewErrorState();
+      setPreview(errorState.preview);
+      setMapping(errorState.mapping);
+      setClientError(errorState.error);
     };
     reader.readAsText(file, "utf-8");
   }
+
+  const inlineError = clientError ?? draftResult?.error ?? null;
 
   return (
     <form action={draftAction}>
@@ -220,9 +198,12 @@ export function CsvImportClient({ supplierId }) {
       <div className="space-y-5">
         <div className="rounded-2xl border bg-white p-5 shadow-sm space-y-3">
           <div>
-            <label className="text-sm font-medium">CSV-файл</label>
+            <label htmlFor="csv-import-file" className="text-sm font-medium">
+              CSV-файл
+            </label>
             <div className="mt-2">
               <input
+                id="csv-import-file"
                 type="file"
                 name="file"
                 accept=".csv,text/csv"
@@ -237,9 +218,13 @@ export function CsvImportClient({ supplierId }) {
             </p>
           </div>
 
-          {draftResult?.error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              {draftResult.error}
+          {inlineError && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+            >
+              {inlineError}
             </div>
           )}
         </div>
@@ -251,13 +236,17 @@ export function CsvImportClient({ supplierId }) {
               <div className="grid gap-2 sm:grid-cols-2">
                 {ALL_FIELDS.map((field) => (
                   <div key={field} className="flex items-center gap-2">
-                    <label className="text-xs w-28 shrink-0 text-zinc-600">
+                    <label
+                      htmlFor={`csv-map-${field}`}
+                      className="text-xs w-28 shrink-0 text-zinc-600"
+                    >
                       {FIELD_LABELS[field]}
                       {REQUIRED_FIELDS.includes(field) && (
                         <span className="text-red-500 ml-0.5">*</span>
                       )}
                     </label>
                     <select
+                      id={`csv-map-${field}`}
                       name={`map_${field}`}
                       value={mapping[field] ?? "-1"}
                       onChange={(e) =>
@@ -267,7 +256,7 @@ export function CsvImportClient({ supplierId }) {
                     >
                       <option value="-1">— не выбрано —</option>
                       {preview.headers.map((h, i) => (
-                        <option key={i} value={String(i)}>
+                        <option key={i} value={String(i)} title={h}>
                           {h} (кол. {i + 1})
                         </option>
                       ))}
@@ -288,6 +277,7 @@ export function CsvImportClient({ supplierId }) {
                       {preview.headers.map((h, i) => (
                         <th
                           key={i}
+                          title={h}
                           className="px-2 py-1.5 text-left font-medium text-zinc-600 whitespace-nowrap"
                         >
                           {h}
@@ -299,7 +289,11 @@ export function CsvImportClient({ supplierId }) {
                     {preview.rows.map((row, i) => (
                       <tr key={i} className="border-b last:border-0 hover:bg-zinc-50">
                         {row.map((cell, j) => (
-                          <td key={j} className="px-2 py-1.5 text-zinc-700 max-w-45 truncate">
+                          <td
+                            key={j}
+                            title={cell}
+                            className="px-2 py-1.5 text-zinc-700 max-w-45 truncate"
+                          >
                             {cell}
                           </td>
                         ))}

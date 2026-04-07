@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/db";
+import { requireOperatorOrAdminRoute } from "@/lib/guards";
+import { buildActorAuditMeta, writeProcurementAudit } from "@/lib/audit";
+import { buildProcurementDocumentFilename } from "@/lib/exportDocuments";
 
 function csvEscape(value) {
   const s = String(value ?? "");
@@ -18,7 +21,7 @@ export async function GET(_req, { params }) {
   const report = await prisma.receivingReport.findUnique({
     where: { procurementId: id },
     include: {
-      procurement: { select: { inviteCode: true } },
+      procurement: { select: { inviteCode: true, pickupPointId: true } },
       lines: {
         include: { product: { select: { name: true } } },
         orderBy: { product: { name: "asc" } },
@@ -29,6 +32,9 @@ export async function GET(_req, { params }) {
   if (!report) {
     return new Response("Акт приёмки не найден", { status: 404 });
   }
+
+  const { session, response } = await requireOperatorOrAdminRoute(report.procurement.pickupPointId);
+  if (response) return response;
 
   const lines = [
     csvRow(["Наименование", "Ожидалось", "Получено", "Расхождение", "Комментарий"]),
@@ -44,7 +50,24 @@ export async function GET(_req, { params }) {
   ];
 
   const csv = "\uFEFF" + lines.join("\r\n");
-  const filename = `receiving_${report.procurement.inviteCode}.csv`;
+  const filename = buildProcurementDocumentFilename(
+    report.procurement.inviteCode,
+    "receiving",
+    "csv"
+  );
+
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel: String(session.email ?? "admin"),
+    action: "EXPORT_DOC",
+    procurementId: id,
+    meta: buildActorAuditMeta(session, {
+      type: "receiving_csv",
+      rowCount: report.lines.length,
+      inviteCode: report.procurement.inviteCode,
+      filename,
+    }),
+  });
 
   return new Response(csv, {
     headers: {

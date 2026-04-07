@@ -6,7 +6,18 @@ import { str, num } from "@/lib/formUtils";
 import { revalidatePath } from "next/cache";
 import { recalcDeliveryShares } from "@/lib/deliveryShares";
 import { createNotification } from "@/lib/notifications";
-import { assertOrderBelongsToProcurement, assertOrderCanCheckin } from "./checkinGuard";
+import { requireAccessibleProcurement } from "@/lib/guards";
+import { writeOrderAudit, writeProcurementAudit } from "@/lib/audit";
+import {
+  getPaymentStatusTransitionError,
+  isAllowedPaymentStatusTransition,
+  PAYMENT_LABELS,
+} from "@/lib/constants";
+import {
+  assertOrderBelongsToProcurement,
+  assertOrderCanCheckin,
+  assertPickupSessionCanCheckin,
+} from "./checkinGuard";
 
 /** Builds aggregated product map from SUBMITTED orders of a procurement */
 async function buildAggMap(procurementId) {
@@ -23,7 +34,6 @@ async function buildAggMap(procurementId) {
         aggMap.set(p.id, {
           productId: p.id,
           name: p.name,
-          unit: p.unit,
           totalQty: 0,
         });
       }
@@ -33,22 +43,49 @@ async function buildAggMap(procurementId) {
   return aggMap;
 }
 
+async function requireProcurementForAdminAction(procurementId, query = { select: { id: true } }) {
+  if (!procurementId) throw new Error("Не указана закупка.");
+
+  const { session, procurement } = await requireAccessibleProcurement(procurementId, query);
+  if (!procurement) throw new Error("Закупка не найдена.");
+
+  return { session, procurement };
+}
+
+async function requireProcurementForAdminResult(procurementId, query = { select: { id: true } }) {
+  try {
+    const { session, procurement } = await requireProcurementForAdminAction(
+      procurementId,
+      query
+    );
+    return { session, procurement, error: null };
+  } catch (error) {
+    return {
+      session: null,
+      procurement: null,
+      error: error instanceof Error ? error.message : "Ошибка доступа.",
+    };
+  }
+}
+
 export async function createReceivingReport(fd) {
   const procurementId = str(fd, "procurementId");
-  const id = str(fd, "id"); // procurement page id for revalidate
 
-  if (!procurementId) throw new Error("procurementId missing");
+  const { session, procurement } = await requireProcurementForAdminAction(procurementId);
+  const actorLabel = session?.email ?? "system";
 
   // Check not already exists
-  const existing = await prisma.receivingReport.findUnique({ where: { procurementId } });
+  const existing = await prisma.receivingReport.findUnique({
+    where: { procurementId: procurement.id },
+  });
   if (existing) throw new Error("Акт приёмки уже существует.");
 
-  const aggMap = await buildAggMap(procurementId);
+  const aggMap = await buildAggMap(procurement.id);
   if (aggMap.size === 0) throw new Error("Нет подтверждённых заявок для создания акта.");
 
   const report = await prisma.receivingReport.create({
     data: {
-      procurementId,
+      procurementId: procurement.id,
       status: "DRAFT",
       lines: {
         create: Array.from(aggMap.values()).map((agg) => ({
@@ -60,127 +97,132 @@ export async function createReceivingReport(fd) {
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel: "admin",
-      action: "CREATE_RECEIVING",
-      entityType: "RECEIVING",
-      entityId: procurementId,
-      meta: { reportId: report.id },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "CREATE_RECEIVING",
+    procurementId: procurement.id,
+    meta: { reportId: report.id },
   });
 
-  revalidatePath(`/admin/procurements/${id}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
 }
 
 export async function updateReceivingLine(fd) {
   const lineId = str(fd, "lineId");
-  const procurementId = str(fd, "procurementId");
   const receivedQty = Math.trunc(num(fd, "receivedQty"));
   const comment = str(fd, "comment") || null;
 
-  if (!lineId) throw new Error("lineId missing");
-  if (!Number.isFinite(receivedQty) || receivedQty < 0) throw new Error("Недопустимое значение кол-ва.");
+  if (!lineId) throw new Error("Не указана строка акта приёмки.");
+  if (!Number.isFinite(receivedQty) || receivedQty < 0) throw new Error("Недопустимое количество.");
+  if (comment && comment.length > 500) {
+    throw new Error("Комментарий слишком длинный. Максимум 500 символов.");
+  }
 
   const line = await prisma.receivingLine.findUnique({
     where: { id: lineId },
-    include: { report: { select: { status: true, id: true } } },
+    include: { report: { select: { status: true, id: true, procurementId: true } } },
   });
   if (!line) throw new Error("Строка не найдена.");
   if (line.report.status === "FINAL") throw new Error("Акт финализирован. Редактирование заблокировано.");
+
+  const { session, procurement } = await requireProcurementForAdminAction(
+    line.report.procurementId
+  );
+  const actorLabel = session?.email ?? "system";
 
   await prisma.receivingLine.update({
     where: { id: lineId },
     data: { receivedQty, comment },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel: "admin",
-      action: "UPDATE_RECEIVING_LINE",
-      entityType: "RECEIVING",
-      entityId: procurementId,
-      meta: { lineId, receivedQty, comment },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "UPDATE_RECEIVING_LINE",
+    procurementId: procurement.id,
+    meta: { lineId, receivedQty, comment },
   });
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
 }
 
 export async function createPickupSession(fd) {
   const procurementId = str(fd, "procurementId");
-  if (!procurementId) throw new Error("procurementId missing");
 
-  const session = await getSession();
-  const actorLabel = session?.email ?? "admin";
+  const { session, procurement } = await requireProcurementForAdminAction(procurementId);
+  const actorLabel = session?.email ?? "system";
 
   const startAtRaw = str(fd, "startAt");
   const endAtRaw = str(fd, "endAt");
 
-  const existing = await prisma.pickupSession.findUnique({ where: { procurementId } });
+  const existing = await prisma.pickupSession.findUnique({
+    where: { procurementId: procurement.id },
+  });
   if (existing) throw new Error("Сессия выдачи уже создана для этой закупки.");
 
   const created = await prisma.pickupSession.create({
     data: {
-      procurementId,
+      procurementId: procurement.id,
       status: "PLANNED",
       startAt: startAtRaw ? new Date(startAtRaw) : null,
       endAt: endAtRaw ? new Date(endAtRaw) : null,
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel,
-      action: "CREATE_PICKUP_SESSION",
-      entityType: "PROCUREMENT",
-      entityId: procurementId,
-      meta: { sessionId: created.id },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "CREATE_PICKUP_SESSION",
+    procurementId: procurement.id,
+    meta: { sessionId: created.id },
   });
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
 }
 
 export async function checkinOrder(fd) {
-  const procurementId = str(fd, "procurementId");
   const sessionId = str(fd, "sessionId");
   const orderId = str(fd, "orderId");
   const note = str(fd, "note") || null;
 
-  if (!sessionId) throw new Error("sessionId missing");
-  if (!orderId) throw new Error("orderId missing");
+  if (!sessionId) throw new Error("Не указана сессия выдачи.");
+  if (!orderId) throw new Error("Не указана заявка.");
 
   const session = await getSession();
-  const actorLabel = session?.email ?? "admin";
+  const actorLabel = session?.email ?? "system";
   const operatorUserId = session?.sub ? String(session.sub) : null;
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     select: { status: true, paymentStatus: true, userId: true, participantName: true, procurementId: true },
   });
-  assertOrderBelongsToProcurement(order, procurementId);
+  if (!order) throw new Error("Заявка не найдена.");
+
+  const { procurement } = await requireProcurementForAdminAction(order.procurementId);
+  assertOrderBelongsToProcurement(order, procurement.id);
   assertOrderCanCheckin(order);
+
+  const pickupSession = await prisma.pickupSession.findUnique({
+    where: { id: sessionId },
+    select: { id: true, procurementId: true, status: true },
+  });
+  assertPickupSessionCanCheckin(pickupSession, procurement.id);
 
   const existingCheckin = await prisma.pickupCheckin.findUnique({ where: { orderId } });
   if (existingCheckin) throw new Error("Эта заявка уже выдана.");
 
   await prisma.pickupCheckin.create({
-    data: { sessionId, orderId, note, operatorUserId },
+    data: { sessionId: pickupSession.id, orderId, note, operatorUserId },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel,
-      action: "CHECKIN_ORDER",
-      entityType: "PROCUREMENT",
-      entityId: procurementId,
-      meta: { orderId, sessionId },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "CHECKIN_ORDER",
+    procurementId: procurement.id,
+    orderId,
+    meta: { sessionId: pickupSession.id },
   });
 
   // Notify the resident
@@ -194,49 +236,55 @@ export async function checkinOrder(fd) {
     });
   }
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
 }
 
-export async function closePickupSession(fd) {
-  const procurementId = str(fd, "procurementId");
+export async function closePickupSession(_prev, fd) {
   const sessionId = str(fd, "sessionId");
 
-  if (!sessionId) throw new Error("sessionId missing");
+  if (!sessionId) return { ok: false, message: "Не указана сессия выдачи." };
 
-  const session = await getSession();
-  const actorLabel = session?.email ?? "admin";
+  const pickupSession = await prisma.pickupSession.findUnique({
+    where: { id: sessionId },
+    select: { id: true, procurementId: true, status: true },
+  });
+  if (!pickupSession) return { ok: false, message: "Сессия выдачи не найдена." };
+  if (pickupSession.status === "CLOSED") {
+    return { ok: false, message: "Сессия уже закрыта." };
+  }
+
+  const { session, procurement } = await requireProcurementForAdminAction(
+    pickupSession.procurementId
+  );
+  const actorLabel = session?.email ?? "system";
 
   await prisma.pickupSession.update({
-    where: { id: sessionId },
+    where: { id: pickupSession.id },
     data: { status: "CLOSED" },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel,
-      action: "CLOSE_PICKUP_SESSION",
-      entityType: "PROCUREMENT",
-      entityId: procurementId,
-      meta: { sessionId },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "CLOSE_PICKUP_SESSION",
+    procurementId: procurement.id,
+    meta: { sessionId: pickupSession.id },
   });
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
+  return { ok: true, message: "Сессия выдачи закрыта." };
 }
 
 // ── Delivery settings ─────────────────────────────────────
 
 export async function updateDeliverySettings(_prev, fd) {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "OPERATOR")) {
-    return { error: "Нет доступа." };
-  }
-  const actorLabel = session.email;
-
   const procurementId = str(fd, "procurementId");
   const deliveryFeeRaw = str(fd, "deliveryFee");
   const deliverySplitMode = str(fd, "deliverySplitMode");
+
+  const { session, procurement, error } = await requireProcurementForAdminResult(procurementId);
+  if (error) return { error };
+  const actorLabel = session?.email ?? "system";
 
   const deliveryFee = parseInt(deliveryFeeRaw, 10);
   if (isNaN(deliveryFee) || deliveryFee < 0) return { error: "Неверная стоимость доставки." };
@@ -245,69 +293,72 @@ export async function updateDeliverySettings(_prev, fd) {
   }
 
   await prisma.procurement.update({
-    where: { id: procurementId },
+    where: { id: procurement.id },
     data: { deliveryFee, deliverySplitMode },
   });
 
-  await recalcDeliveryShares(procurementId);
+  await recalcDeliveryShares(procurement.id);
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel,
-      action: "UPDATE_DELIVERY_SETTINGS",
-      entityType: "PROCUREMENT",
-      entityId: procurementId,
-      meta: { deliveryFee, deliverySplitMode },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "UPDATE_DELIVERY_SETTINGS",
+    procurementId: procurement.id,
+    meta: { deliveryFee, deliverySplitMode },
   });
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
   return { ok: true, message: "Настройки сохранены, доли пересчитаны." };
 }
 
 export async function recalcShares(fd) {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "OPERATOR")) {
-    throw new Error("Нет доступа.");
-  }
-  const actorLabel = session.email;
   const procurementId = str(fd, "procurementId");
+  if (!procurementId) throw new Error("Не указана закупка.");
 
-  await recalcDeliveryShares(procurementId);
+  const { session, procurement } = await requireProcurementForAdminAction(procurementId);
+  const actorLabel = session?.email ?? "system";
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel,
-      action: "RECALC_DELIVERY_SHARES",
-      entityType: "PROCUREMENT",
-      entityId: procurementId,
-      meta: {},
-    },
+  await recalcDeliveryShares(procurement.id);
+
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "RECALC_DELIVERY_SHARES",
+    procurementId: procurement.id,
   });
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
 }
 
 // ── Payment status ─────────────────────────────────────────
 
-export async function updatePaymentStatus(fd) {
-  const session = await getSession();
-  if (!session || (session.role !== "ADMIN" && session.role !== "OPERATOR")) {
-    throw new Error("Нет доступа.");
-  }
-  const actorLabel = session.email;
-
+export async function updatePaymentStatus(_prev, fd) {
   const orderId = str(fd, "orderId");
-  const procurementId = str(fd, "procurementId");
   const paymentStatus = str(fd, "paymentStatus");
   const paymentMethod = str(fd, "paymentMethod") || null;
 
-  if (!orderId) throw new Error("orderId missing");
-  if (!["PAID", "PAY_ON_PICKUP", "UNPAID"].includes(paymentStatus)) {
-    throw new Error("Неверный статус оплаты.");
+  if (!orderId) {
+    return { ok: false, error: "Не указана заявка." };
   }
+  if (!["PAID", "PAY_ON_PICKUP", "UNPAID"].includes(paymentStatus)) {
+    return { ok: false, error: "Некорректный статус оплаты." };
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { procurementId: true, userId: true, paymentStatus: true },
+  });
+  if (!order) return { ok: false, error: "Заявка не найдена." };
+
+  if (order.paymentStatus === paymentStatus) {
+    return { ok: false, error: getPaymentStatusTransitionError(order.paymentStatus, paymentStatus) };
+  }
+  if (!isAllowedPaymentStatusTransition(order.paymentStatus, paymentStatus)) {
+    return { ok: false, error: getPaymentStatusTransitionError(order.paymentStatus, paymentStatus) };
+  }
+
+  const { session, procurement } = await requireProcurementForAdminAction(order.procurementId);
+  const actorLabel = session?.email ?? "system";
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
@@ -319,59 +370,61 @@ export async function updatePaymentStatus(fd) {
     select: { userId: true },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel,
-      action: "UPDATE_PAYMENT_STATUS",
-      entityType: "ORDER",
-      entityId: procurementId,
-      meta: { orderId, paymentStatus, paymentMethod },
-    },
+  await writeOrderAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "UPDATE_PAYMENT_STATUS",
+    orderId,
+    procurementId: procurement.id,
+    meta: { paymentStatus, paymentMethod },
   });
 
   // Notify the resident
   if (updatedOrder.userId) {
-    const LABELS = { UNPAID: "Не оплачено", PAID: "Оплачено", PAY_ON_PICKUP: "Оплата при выдаче" };
     await createNotification({
       userId: updatedOrder.userId,
       type: "PAYMENT_STATUS_CHANGED",
       title: "Статус оплаты изменён",
-      body: `Статус оплаты вашего заказа изменён на: ${LABELS[paymentStatus] ?? paymentStatus}.`,
+      body: `Статус оплаты вашего заказа изменён на: ${PAYMENT_LABELS[paymentStatus] ?? paymentStatus}.`,
       linkUrl: `/my/orders/${orderId}`,
     });
   }
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
+  return { ok: true, message: "Статус оплаты обновлён." };
 }
 
 // ── Receiving / finalize ───────────────────────────────────
 
 export async function finalizeReceivingReport(fd) {
   const reportId = str(fd, "reportId");
-  const procurementId = str(fd, "procurementId");
 
-  if (!reportId) throw new Error("reportId missing");
+  if (!reportId) throw new Error("Не указан акт приёмки.");
 
-  const report = await prisma.receivingReport.findUnique({ where: { id: reportId } });
+  const report = await prisma.receivingReport.findUnique({
+    where: { id: reportId },
+    select: { id: true, status: true, procurementId: true },
+  });
   if (!report) throw new Error("Акт не найден.");
   if (report.status === "FINAL") throw new Error("Акт уже финализирован.");
 
+  const { session, procurement } = await requireProcurementForAdminAction(
+    report.procurementId
+  );
+  const actorLabel = session?.email ?? "system";
+
   await prisma.receivingReport.update({
-    where: { id: reportId },
+    where: { id: report.id },
     data: { status: "FINAL" },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorType: "ADMIN",
-      actorLabel: "admin",
-      action: "FINALIZE_RECEIVING",
-      entityType: "RECEIVING",
-      entityId: procurementId,
-      meta: { reportId },
-    },
+  await writeProcurementAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "FINALIZE_RECEIVING",
+    procurementId: procurement.id,
+    meta: { reportId: report.id },
   });
 
-  revalidatePath(`/admin/procurements/${procurementId}`);
+  revalidatePath(`/admin/procurements/${procurement.id}`);
 }

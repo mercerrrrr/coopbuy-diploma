@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { detectDelim, parseLine, parseCSVText, autoDetectMapping } from "./csvParser";
+import {
+  autoDetectMapping,
+  buildClientPreviewErrorState,
+  buildClientPreviewState,
+  CSV_IMPORT_CLIENT_ERRORS,
+  detectDelim,
+  parseLine,
+  parseCSVText,
+} from "./csvParser";
 
 // ── detectDelim ──────────────────────────────────────────────────────────────
 
@@ -138,5 +146,37 @@ describe("autoDetectMapping()", () => {
     const m = autoDetectMapping(headers);
     expect(m.name).toBe(0);
     expect(m.price).toBe(1);
+  });
+});
+
+// ── client preview helpers ───────────────────────────────────────────────────
+
+describe("buildClientPreviewState()", () => {
+  it("готовит preview и string-based mapping для client form", () => {
+    const result = buildClientPreviewState(
+      "Название;Категория;Ед;Цена\nГречка;Крупы;кг;125"
+    );
+
+    expect(result.preview).toEqual({
+      headers: ["Название", "Категория", "Ед", "Цена"],
+      rows: [["Гречка", "Крупы", "кг", "125"]],
+      total: 1,
+    });
+    expect(result.mapping).toEqual({
+      name: "0",
+      category: "1",
+      unit: "2",
+      price: "3",
+    });
+  });
+});
+
+describe("buildClientPreviewErrorState()", () => {
+  it("возвращает состояние для file read error path", () => {
+    expect(buildClientPreviewErrorState()).toEqual({
+      preview: null,
+      mapping: {},
+      error: CSV_IMPORT_CLIENT_ERRORS.fileRead,
+    });
   });
 });

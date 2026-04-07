@@ -1,6 +1,6 @@
 import Link from "next/link";
+import { ArrowSquareOut, Buildings, MapPin, Package } from "@phosphor-icons/react/ssr";
 import { prisma } from "@/lib/db";
-
 import {
   createSupplier,
   toggleSupplierActive,
@@ -10,13 +10,13 @@ import {
   createProduct,
   deleteProduct,
 } from "./actions";
-
 import { CreateSupplierForm, AddDeliveryZoneForm, CreateProductForm } from "./ClientForms";
 import { DeleteSupplierButton, DeleteZoneButton, DeleteProductButton } from "./DeleteButtons";
+import { ActionButtonForm } from "@/components/ui/ActionForm";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Building2, MapPin, Package, ExternalLink } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function SuppliersPage() {
   const [settlementsRaw, suppliers, categories, units] = await Promise.all([
@@ -41,26 +41,27 @@ export default async function SuppliersPage() {
     prisma.unit.findMany({ orderBy: { name: "asc" } }),
   ]);
 
-  const settlements = settlementsRaw.map((s) => ({
-    id: s.id,
-    label: `${s.region.name} • ${s.name}`,
+  const settlements = settlementsRaw.map((settlement) => ({
+    id: settlement.id,
+    label: `${settlement.region.name} • ${settlement.name}`,
   }));
 
   return (
-    <main className="mx-auto max-w-5xl p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 text-zinc-400 text-xs mb-1.5">
-          <Building2 size={13} />
-          <span>Поставщики</span>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Поставщики</h1>
-        <p className="mt-0.5 text-sm text-zinc-500">
-          Ассортимент, зоны доставки и минимальные суммы заказа
-        </p>
-      </div>
+    <main className="cb-shell space-y-4 py-1">
+      <PageHeader
+        eyebrow="Операционный центр / поставщики"
+        title="Поставщики и их ассортимент"
+        description="Управляйте карточками поставщиков, зонами доставки и товарными позициями в одном справочнике."
+        meta={
+          <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3">
+            <div className="cb-kicker">Всего поставщиков</div>
+            <div className="mt-1.5 text-xl font-semibold text-[color:var(--cb-text)]">
+              {suppliers.length}
+            </div>
+          </div>
+        }
+      />
 
-      {/* Add supplier form */}
       <Card>
         <CardHeader>
           <CardTitle>Добавить поставщика</CardTitle>
@@ -70,141 +71,154 @@ export default async function SuppliersPage() {
         </CardBody>
       </Card>
 
-      {/* Supplier list */}
       {suppliers.length === 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <div className="cb-panel-strong rounded-[1.1rem]">
           <EmptyState
-            icon={<Building2 size={36} />}
+            icon={<Buildings size={36} weight="duotone" />}
             title="Поставщиков пока нет"
-            description="Добавьте первого поставщика с помощью формы выше"
+            description="Создайте первую карточку поставщика, чтобы подключить ассортимент и зоны доставки."
           />
         </div>
       )}
 
       <div className="space-y-4">
-        {suppliers.map((sp) => (
-          <Card key={sp.id}>
-            {/* Supplier header */}
-            <CardHeader>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-semibold text-zinc-900">{sp.name}</h2>
-                <Badge variant={sp.isActive ? "success" : "neutral"}>
-                  {sp.isActive ? "активен" : "выключен"}
-                </Badge>
-                <span className="text-sm text-zinc-500">
-                  Мин. сумма: <span className="font-medium text-zinc-700">{sp.minOrderSum} ₽</span>
-                </span>
-                {sp.phone && <span className="text-sm text-zinc-500">{sp.phone}</span>}
+        {suppliers.map((supplier) => (
+          <Card key={supplier.id}>
+            <CardHeader className="items-start">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-semibold text-[color:var(--cb-text)]">{supplier.name}</h2>
+                  <Badge variant={supplier.isActive ? "success" : "neutral"}>
+                    {supplier.isActive ? "Активен" : "Отключён"}
+                  </Badge>
+                </div>
+                <div className="mt-1 text-sm text-[color:var(--cb-text-soft)]">
+                  Мин. сумма заказа:{" "}
+                  <span className="font-medium text-[color:var(--cb-text)]">
+                    {supplier.minOrderSum.toLocaleString("ru-RU")} ₽
+                  </span>
+                </div>
+                {(supplier.phone || supplier.email) && (
+                  <div className="mt-1 text-xs text-[color:var(--cb-text-faint)]">
+                    {[supplier.phone, supplier.email].filter(Boolean).join(" · ")}
+                  </div>
+                )}
               </div>
+
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  href={`/admin/suppliers/${sp.id}/import`}
-                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 transition-colors"
+                  href={`/admin/suppliers/${supplier.id}/import`}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm font-medium text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
                 >
-                  <ExternalLink size={12} />
+                  <ArrowSquareOut size={14} />
                   Импорт CSV
                 </Link>
-                <form action={toggleSupplierActive}>
-                  <input type="hidden" name="id" value={sp.id} />
-                  <input type="hidden" name="current" value={String(sp.isActive)} />
-                  <button className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 transition-colors">
-                    {sp.isActive ? "Выключить" : "Включить"}
-                  </button>
-                </form>
-                <DeleteSupplierButton supplierId={sp.id} action={deleteSupplier} />
+                <ActionButtonForm
+                  action={toggleSupplierActive}
+                  hiddenFields={{ id: supplier.id }}
+                  label={supplier.isActive ? "Отключить" : "Включить"}
+                  pendingLabel="Сохраняем..."
+                  size="sm"
+                />
+                <DeleteSupplierButton supplierId={supplier.id} action={deleteSupplier} />
               </div>
             </CardHeader>
 
             <CardBody className="space-y-4">
-              {/* Delivery zones */}
-              <div>
-                <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-700 mb-2">
-                  <MapPin size={14} className="text-zinc-400" />
-                  Зоны доставки
-                </div>
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
+              <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
+                <div className="rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[color:var(--cb-text)]">
+                    <MapPin size={16} className="text-[color:var(--cb-accent)]" />
+                    Зоны доставки
+                  </div>
+
                   <AddDeliveryZoneForm
                     action={addDeliveryZone}
-                    supplierId={sp.id}
+                    supplierId={supplier.id}
                     settlements={settlements}
                   />
-                  {sp.zones.length === 0 ? (
-                    <p className="text-sm text-zinc-400 py-2 text-center">Зон доставки нет</p>
+
+                  {supplier.zones.length === 0 ? (
+                    <p className="py-3 text-center text-sm text-[color:var(--cb-text-faint)]">
+                      Зоны доставки ещё не добавлены.
+                    </p>
                   ) : (
-                    <ul className="space-y-2">
-                      {sp.zones.map((z) => (
+                    <ul className="mt-3 space-y-2">
+                      {supplier.zones.map((zone) => (
                         <li
-                          key={z.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5"
+                          key={zone.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[color:var(--cb-line)] bg-white px-3 py-2.5"
                         >
                           <div>
-                            <span className="text-sm font-medium text-zinc-800">
-                              {z.settlement.region.name} · {z.settlement.name}
+                            <span className="text-sm font-medium text-[color:var(--cb-text)]">
+                              {zone.settlement.region.name} · {zone.settlement.name}
                             </span>
                             <span className="ml-2">
-                              <Badge variant={z.isActive ? "success" : "neutral"}>
-                                {z.isActive ? "активно" : "выключено"}
+                              <Badge variant={zone.isActive ? "success" : "neutral"}>
+                                {zone.isActive ? "Доступна" : "Отключена"}
                               </Badge>
                             </span>
                           </div>
-                          <DeleteZoneButton zoneId={z.id} action={deleteDeliveryZone} />
+                          <DeleteZoneButton zoneId={zone.id} action={deleteDeliveryZone} />
                         </li>
                       ))}
                     </ul>
                   )}
                 </div>
-              </div>
 
-              {/* Products */}
-              <div>
-                <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-700 mb-2">
-                  <Package size={14} className="text-zinc-400" />
-                  Товары
-                  <span className="text-xs text-zinc-400">({sp.products.length})</span>
-                </div>
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-3">
+                <div className="rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[color:var(--cb-text)]">
+                    <Package size={16} className="text-[color:var(--cb-accent)]" />
+                    Товарные позиции
+                    <span className="text-xs text-[color:var(--cb-text-faint)]">
+                      ({supplier.products.length})
+                    </span>
+                  </div>
+
                   <CreateProductForm
                     action={createProduct}
-                    supplierId={sp.id}
+                    supplierId={supplier.id}
                     categories={categories}
                     units={units}
                   />
-                  {sp.products.length === 0 ? (
-                    <p className="text-sm text-zinc-400 py-2 text-center">Товаров нет</p>
+
+                  {supplier.products.length === 0 ? (
+                    <p className="py-3 text-center text-sm text-[color:var(--cb-text-faint)]">
+                      Товары ещё не добавлены.
+                    </p>
                   ) : (
-                    <div className="overflow-x-auto rounded-xl border border-zinc-200">
+                    <div className="mt-3 overflow-x-auto rounded-xl border border-[color:var(--cb-line)]">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs text-zinc-500">
+                          <tr className="border-b border-[color:var(--cb-line)] bg-white/72 text-left text-xs text-[color:var(--cb-text-faint)]">
                             <th className="px-3 py-2.5 font-medium">Наименование</th>
                             <th className="px-3 py-2.5 font-medium">Категория</th>
                             <th className="px-3 py-2.5 font-medium">Ед.</th>
-                            <th className="px-3 py-2.5 font-medium text-right">Цена, ₽</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Цена, ₽</th>
                             <th className="px-3 py-2.5 font-medium">SKU</th>
                             <th className="px-3 py-2.5 font-medium" />
                           </tr>
                         </thead>
                         <tbody>
-                          {sp.products.map((p, idx) => (
+                          {supplier.products.map((product, index) => (
                             <tr
-                              key={p.id}
+                              key={product.id}
                               className={[
-                                "border-b last:border-0 transition-colors",
-                                idx % 2 === 0 ? "bg-white" : "bg-zinc-50/40",
-                                "hover:bg-indigo-50/20",
+                                "border-b border-[color:var(--cb-line)] last:border-b-0",
+                                index % 2 === 0 ? "bg-white" : "bg-[color:var(--cb-bg-soft)]",
                               ].join(" ")}
                             >
-                              <td className="px-3 py-2.5 font-medium text-zinc-900">{p.name}</td>
-                              <td className="px-3 py-2.5 text-zinc-500">{p.category.name}</td>
-                              <td className="px-3 py-2.5 text-zinc-500">{p.unit.name}</td>
-                              <td className="px-3 py-2.5 text-right font-semibold text-zinc-900">
-                                {p.price}
+                              <td className="px-3 py-2.5 font-medium text-[color:var(--cb-text)]">{product.name}</td>
+                              <td className="px-3 py-2.5 text-[color:var(--cb-text-soft)]">{product.category.name}</td>
+                              <td className="px-3 py-2.5 text-[color:var(--cb-text-soft)]">{product.unit.name}</td>
+                              <td className="px-3 py-2.5 text-right font-semibold text-[color:var(--cb-text)]">
+                                {product.price}
                               </td>
-                              <td className="px-3 py-2.5 text-zinc-400 font-mono text-xs">
-                                {p.sku ?? "—"}
+                              <td className="px-3 py-2.5 font-mono text-xs text-[color:var(--cb-text-faint)]">
+                                {product.sku ?? "—"}
                               </td>
                               <td className="px-3 py-2.5">
-                                <DeleteProductButton productId={p.id} action={deleteProduct} />
+                                <DeleteProductButton productId={product.id} action={deleteProduct} />
                               </td>
                             </tr>
                           ))}

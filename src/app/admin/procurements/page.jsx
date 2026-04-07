@@ -6,24 +6,14 @@ import { createProcurement, closeProcurement } from "./actions";
 import { autoCloseExpiredProcurements } from "@/lib/procurements/autoCloseExpired";
 import { CreateProcurementForm } from "./ClientForms";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { ActionButtonForm } from "@/components/ui/ActionForm";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ShoppingCart, Plus, ChevronLeft, ChevronRight } from "lucide-react";
-
-const STATUS_LABELS = {
-  DRAFT: "Черновик",
-  OPEN: "Открыта",
-  CLOSED: "Закрыта",
-  CANCELED: "Отменена",
-};
-
-const STATUS_VARIANTS = {
-  DRAFT: "neutral",
-  OPEN: "success",
-  CLOSED: "neutral",
-  CANCELED: "danger",
-};
+import { Pager } from "@/components/ui/Pager";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { STATUS_LABELS, STATUS_VARIANTS } from "@/lib/constants";
+import { getProcurementState } from "@/lib/procurements/state";
 
 const PAGE_SIZE = 20;
 
@@ -34,20 +24,18 @@ export default async function ProcurementsPage({ searchParams }) {
   const baseUrl = await getBaseUrl();
   const now = new Date();
 
-  await autoCloseExpiredProcurements(prisma);
-
   const session = await getSession();
+  await autoCloseExpiredProcurements(prisma);
   const isOperator = session?.role === "OPERATOR";
   const operatorPickupPointId = isOperator ? String(session.pickupPointId ?? "") : null;
 
-  // Derive settlement for OPERATOR
   let operatorSettlementId = null;
   if (isOperator && operatorPickupPointId) {
-    const pp = await prisma.pickupPoint.findUnique({
+    const pickupPoint = await prisma.pickupPoint.findUnique({
       where: { id: operatorPickupPointId },
       select: { settlementId: true },
     });
-    operatorSettlementId = pp?.settlementId ?? null;
+    operatorSettlementId = pickupPoint?.settlementId ?? null;
   }
 
   const viewFilter =
@@ -88,8 +76,7 @@ export default async function ProcurementsPage({ searchParams }) {
       prisma.procurement.count({ where: procurementWhere }),
     ]);
 
-  // One GROUP BY query replaces N × orders × items fetches
-  const procurementIds = procurements.map((p) => p.id);
+  const procurementIds = procurements.map((procurement) => procurement.id);
   const orderStats =
     procurementIds.length > 0
       ? await prisma.order.groupBy({
@@ -101,69 +88,75 @@ export default async function ProcurementsPage({ searchParams }) {
       : [];
 
   const statsMap = new Map(
-    orderStats.map((s) => [
-      s.procurementId,
-      { count: s._count._all, total: s._sum.goodsTotal ?? 0 },
+    orderStats.map((stat) => [
+      stat.procurementId,
+      { count: stat._count._all, total: stat._sum.goodsTotal ?? 0 },
     ])
   );
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  const settlements = settlementsRaw.map((s) => ({
-    id: s.id,
-    label: `${s.region.name} • ${s.name}`,
+  const settlements = settlementsRaw.map((settlement) => ({
+    id: settlement.id,
+    label: `${settlement.name}${settlement.region.name ? ` · ${settlement.region.name}` : ""}`,
   }));
 
-  const pickupPoints = pickupPointsRaw.map((p) => ({
-    id: p.id,
-    settlementId: p.settlementId,
-    label: `${p.name} — ${p.settlement.region.name} • ${p.settlement.name}`,
+  const pickupPoints = pickupPointsRaw.map((pickupPoint) => ({
+    id: pickupPoint.id,
+    settlementId: pickupPoint.settlementId,
+    label: `${pickupPoint.name} — ${pickupPoint.settlement.name}${
+      pickupPoint.settlement.region.name ? ` · ${pickupPoint.settlement.region.name}` : ""
+    }`,
   }));
 
   return (
-    <main className="mx-auto max-w-5xl p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 text-zinc-400 text-xs mb-1.5">
-          <ShoppingCart size={13} />
-          <span>Закупки</span>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Закупки</h1>
-        <p className="mt-0.5 text-sm text-zinc-500">
-          Создайте закупку → поделитесь ссылкой → участники добавляют товары
-        </p>
+    <main className="cb-shell space-y-4 py-1">
+      <PageHeader
+        eyebrow="Операционный центр / закупки"
+        title={isOperator ? "Закупки вашей точки выдачи" : "Управление закупками"}
+        description="Создавайте закупки, публикуйте ссылку для жителей и контролируйте статус сбора, оплаты и завершения из одного списка."
+        meta={
+          <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3">
+            <div className="cb-kicker">Сейчас</div>
+            <div className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-[color:var(--cb-text)]">
+              {totalCount}
+            </div>
+            <div className="text-xs text-[color:var(--cb-text-soft)]">
+              закупок · {view === "active" ? "активный список" : "архив"}
+            </div>
+          </div>
+        }
+      />
+
+      <div className="flex flex-wrap gap-2">
+        {[
+          { key: "active", label: "Активные" },
+          { key: "archive", label: "Архив" },
+        ].map((item) => (
+          <a
+            key={item.key}
+            href={`?view=${item.key}&page=1`}
+            className={`inline-flex min-h-9 items-center rounded-md border px-3 py-2 text-sm font-medium ${
+              view === item.key
+                ? "border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent)] text-white shadow-[var(--cb-shadow-xs)]"
+                : "border-[color:var(--cb-line-strong)] bg-white text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
+            }`}
+          >
+            {item.label}
+          </a>
+        ))}
       </div>
 
-      {/* View switcher */}
-      <div className="flex gap-2">
-        <a
-          href="?view=active&page=1"
-          className={`inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-            view === "active"
-              ? "bg-indigo-600 text-white"
-              : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
-          }`}
-        >
-          Активные
-        </a>
-        <a
-          href="?view=archive&page=1"
-          className={`inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
-            view === "archive"
-              ? "bg-indigo-600 text-white"
-              : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
-          }`}
-        >
-          Архив
-        </a>
-      </div>
-
-      {/* Create procurement form */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Plus size={15} className="text-zinc-400" />
-            <CardTitle>Создать закупку</CardTitle>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[color:var(--cb-line)] bg-[color:var(--cb-accent-soft)] text-sm font-semibold text-[color:var(--cb-accent-strong)]">
+              01
+            </span>
+            <div>
+              <CardTitle>Создать закупку</CardTitle>
+              <p className="mt-1 text-sm text-[color:var(--cb-text-soft)]">Форма создания новой закупки.</p>
+            </div>
           </div>
         </CardHeader>
         <CardBody>
@@ -178,103 +171,108 @@ export default async function ProcurementsPage({ searchParams }) {
         </CardBody>
       </Card>
 
-      {/* Empty state */}
       {totalCount === 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <Card>
           <EmptyState
-            icon={<ShoppingCart size={36} />}
             title="Закупок пока нет"
-            description="Создайте первую закупку с помощью формы выше"
+            description="Создайте первую закупку с помощью формы выше."
           />
-        </div>
+        </Card>
       )}
 
-      {/* Procurements list */}
       <div className="space-y-4">
-        {procurements.map((p) => {
-          const inviteUrl = `/p/${p.inviteCode}`;
-          const stats = statsMap.get(p.id) ?? { count: 0, total: 0 };
+        {procurements.map((procurement) => {
+          const stats = statsMap.get(procurement.id) ?? { count: 0, total: 0 };
           const submittedCount = stats.count;
           const submittedTotal = stats.total;
           const progress =
-            p.minTotalSum > 0
-              ? Math.min(100, Math.round((submittedTotal / p.minTotalSum) * 100))
+            procurement.minTotalSum > 0
+              ? Math.min(100, Math.round((submittedTotal / procurement.minTotalSum) * 100))
               : null;
+          const procurementState = getProcurementState(procurement, submittedTotal, now);
+          const fullInviteUrl = `${baseUrl}/p/${procurement.inviteCode}`;
 
-          const fullInviteUrl = `${baseUrl}/p/${p.inviteCode}`;
           return (
-            <Card key={p.id}>
-              <CardHeader>
-                <div className="flex items-start gap-3 flex-wrap min-w-0">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-base font-semibold text-zinc-900 leading-tight">
-                        {p.title}
-                      </h2>
-                      <Badge variant={STATUS_VARIANTS[p.status] ?? "neutral"}>
-                        {STATUS_LABELS[p.status] ?? p.status}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 text-sm text-zinc-500">
-                      {p.supplier.name} · {p.settlement.region.name} · {p.settlement.name} ·{" "}
-                      {p.pickupPoint.name}
-                    </div>
-                    <div className="mt-0.5 text-xs text-zinc-400">
-                      Дедлайн: {new Date(p.deadlineAt).toLocaleString("ru-RU")} · Мин.{" "}
-                      {p.minTotalSum.toLocaleString("ru-RU")} ₽
-                    </div>
+            <Card key={procurement.id}>
+              <CardHeader className="items-start">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-semibold tracking-[-0.02em] text-[color:var(--cb-text)]">
+                      {procurement.title}
+                    </h2>
+                    <Badge variant={STATUS_VARIANTS[procurement.status] ?? "neutral"}>
+                      {STATUS_LABELS[procurement.status] ?? procurement.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 text-sm text-[color:var(--cb-text-soft)]">
+                    {procurement.supplier.name} · {procurement.settlement.region.name} ·{" "}
+                    {procurement.settlement.name} · {procurement.pickupPoint.name}
+                  </div>
+                  <div className="mt-1 text-xs text-[color:var(--cb-text-faint)]">
+                    Дедлайн: {new Date(procurement.deadlineAt).toLocaleString("ru-RU")} · Мин.{" "}
+                    {procurement.minTotalSum.toLocaleString("ru-RU")} ₽
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 shrink-0">
+
+                <div className="flex shrink-0 flex-wrap gap-2">
                   <Link
-                    href={`/admin/procurements/${p.id}`}
-                    className="inline-flex items-center gap-1 rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
+                    href={`/admin/procurements/${procurement.id}`}
+                    className="inline-flex min-h-9 items-center rounded-md border border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent)] px-3 py-2 text-sm font-medium text-white shadow-[var(--cb-shadow-xs)] hover:bg-[color:var(--cb-accent-strong)]"
                   >
                     Детали
                   </Link>
                   <Link
-                    href={inviteUrl}
-                    className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
+                    href={`/p/${procurement.inviteCode}`}
+                    className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm font-medium text-[color:var(--cb-text)] hover:bg-[color:var(--cb-bg-soft)]"
                   >
                     Открыть
                   </Link>
-                  <form action={closeProcurement}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <button className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors">
-                      Закрыть
-                    </button>
-                  </form>
+                  <ActionButtonForm
+                    action={closeProcurement}
+                    hiddenFields={{ id: procurement.id }}
+                    label="Закрыть"
+                    pendingLabel="Закрываем..."
+                    confirmText="Закрыть закупку и остановить приём заявок?"
+                    size="sm"
+                  />
                 </div>
               </CardHeader>
 
-              <CardBody className="pt-3 pb-4">
-                <div className="flex flex-wrap items-center gap-4 text-sm mb-3">
-                  <span className="text-zinc-500">
-                    Заявок (подтв.):{" "}
-                    <span className="font-semibold text-zinc-900">{submittedCount}</span>
-                  </span>
-                  <span className="text-zinc-500">
-                    Собрано:{" "}
-                    <span className="font-semibold text-zinc-900">
+              <CardBody className="space-y-4">
+                <div className="grid gap-2 md:grid-cols-[0.95fr_1.05fr]">
+                  <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3">
+                    <div className="cb-kicker">Подтверждено</div>
+                    <div className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-[color:var(--cb-text)]">
+                      {submittedCount}
+                    </div>
+                    <div className="mt-1 text-xs text-[color:var(--cb-text-soft)]">заявок</div>
+                  </div>
+
+                  <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3">
+                    <div className="cb-kicker">Собрано</div>
+                    <div className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-[color:var(--cb-text)]">
                       {submittedTotal.toLocaleString("ru-RU")} ₽
-                    </span>
+                    </div>
+                    <div className="mt-1 text-xs text-[color:var(--cb-text-soft)]">{progress !== null ? `${progress}% от порога` : "Порог не задан"}</div>
                     {progress !== null && (
-                      <span className="ml-1.5 text-indigo-600 font-medium">({progress}%)</span>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[rgba(var(--cb-accent-rgb),0.12)]">
+                        <div
+                          className="h-1.5 rounded-full bg-[color:var(--cb-accent)] animate-progress"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
                     )}
-                  </span>
+                  </div>
                 </div>
 
-                {progress !== null && (
-                  <div className="h-1.5 w-full max-w-xs rounded-full bg-zinc-100 overflow-hidden">
-                    <div
-                      className="h-1.5 rounded-full bg-indigo-500 animate-progress"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
+                {procurementState.closedBecauseMinNotReached && (
+                  <p className="rounded-[0.95rem] border border-amber-200 bg-amber-50/90 px-3.5 py-2.5 text-sm text-amber-900">
+                    Минимальная сумма не достигнута. Закупка закрыта и перенесена в архив.
+                  </p>
                 )}
 
-                <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  <code className="text-xs bg-zinc-100 rounded px-1.5 py-0.5 text-zinc-600 font-mono break-all">
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="rounded-md border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3 py-2 text-xs text-[color:var(--cb-text-soft)] break-all">
                     {fullInviteUrl}
                   </code>
                   <CopyLinkButton textToCopy={fullInviteUrl} label="Скопировать" />
@@ -285,52 +283,10 @@ export default async function ProcurementsPage({ searchParams }) {
         })}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 py-2">
-          {page > 1 ? (
-            <a
-              href={`?view=${view}&page=${page - 1}`}
-              className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
-            >
-              <ChevronLeft size={14} />
-              Назад
-            </a>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-xl border border-zinc-100 px-3 py-2 text-sm text-zinc-300 cursor-not-allowed">
-              <ChevronLeft size={14} />
-              Назад
-            </span>
-          )}
+      <Pager page={page} totalPages={totalPages} baseUrl="/admin/procurements" query={{ view }} />
 
-          <span className="text-sm text-zinc-500">
-            Страница{" "}
-            <span className="font-semibold text-zinc-900">{page}</span>
-            {" "}из{" "}
-            <span className="font-semibold text-zinc-900">{totalPages}</span>
-            <span className="ml-1.5 text-zinc-400 text-xs">({totalCount} закупок)</span>
-          </span>
-
-          {page < totalPages ? (
-            <a
-              href={`?view=${view}&page=${page + 1}`}
-              className="inline-flex items-center gap-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 transition-colors"
-            >
-              Вперёд
-              <ChevronRight size={14} />
-            </a>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-xl border border-zinc-100 px-3 py-2 text-sm text-zinc-300 cursor-not-allowed">
-              Вперёд
-              <ChevronRight size={14} />
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Page info when no pagination needed */}
       {totalCount > 0 && totalPages <= 1 && (
-        <p className="text-center text-xs text-zinc-400 py-2">
+        <p className="pb-2 text-center text-xs text-[color:var(--cb-text-faint)]">
           Всего закупок: {totalCount}
         </p>
       )}

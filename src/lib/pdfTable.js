@@ -10,6 +10,28 @@ const DEFAULT_ROW_ALT = rgb(0.96, 0.96, 0.97);
 const DEFAULT_LINE = rgb(0.78, 0.78, 0.82);
 const DEFAULT_TEXT = rgb(0.07, 0.07, 0.1);
 
+function splitLongWord(word, font, fontSize, maxWidth) {
+  const segments = [];
+  let current = "";
+
+  for (const char of Array.from(word)) {
+    const candidate = current + char;
+    if (!current || font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+
+    segments.push(current);
+    current = char;
+  }
+
+  if (current) {
+    segments.push(current);
+  }
+
+  return segments.length > 0 ? segments : [word];
+}
+
 /**
  * Draws a table on a pdf-lib document.
  *
@@ -46,7 +68,69 @@ export function drawTable({
   textColor = DEFAULT_TEXT,
 }) {
   const totalW = colWidths.reduce((s, w) => s + w, 0);
-  const textY = (rowTop) => rowTop - rowHeight + Math.round(rowHeight * 0.32);
+  const cellPaddingX = 4;
+  const cellPaddingY = Math.max(4, Math.round(fontSize * 0.65));
+  const lineHeight = Math.max(fontSize + 2, Math.round(fontSize * 1.25));
+
+  function wrapText(text, maxWidth) {
+    const source = String(text ?? "");
+    if (!source) return [""];
+
+    const wrappedLines = [];
+    const rawLines = source.split(/\r?\n/);
+
+    for (const rawLine of rawLines) {
+      const words = rawLine.trim().split(/\s+/).filter(Boolean);
+      if (words.length === 0) {
+        wrappedLines.push("");
+        continue;
+      }
+
+      let currentLine = "";
+
+      for (const word of words) {
+        if (font.widthOfTextAtSize(word, fontSize) > maxWidth) {
+          if (currentLine) {
+            wrappedLines.push(currentLine);
+            currentLine = "";
+          }
+
+          const segments = splitLongWord(word, font, fontSize, maxWidth);
+          wrappedLines.push(...segments.slice(0, -1));
+          currentLine = segments.at(-1) ?? "";
+          continue;
+        }
+
+        const candidate = currentLine ? `${currentLine} ${word}` : word;
+        if (!currentLine || font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+          currentLine = candidate;
+          continue;
+        }
+
+        wrappedLines.push(currentLine);
+        currentLine = word;
+      }
+
+      if (currentLine) {
+        wrappedLines.push(currentLine);
+      }
+    }
+
+    return wrappedLines.length > 0 ? wrappedLines : [""];
+  }
+
+  function getRowMetrics(row) {
+    const cellLines = row.map((value, colIdx) =>
+      wrapText(value, Math.max(colWidths[colIdx] - cellPaddingX * 2, fontSize))
+    );
+    const maxLineCount = Math.max(...cellLines.map((lines) => lines.length));
+    const computedHeight = Math.max(
+      rowHeight,
+      cellPaddingY * 2 + Math.max(1, maxLineCount) * lineHeight - 2
+    );
+
+    return { cellLines, height: computedHeight };
+  }
 
   function cellX(colIdx, align, text) {
     let cx = startX;
@@ -54,9 +138,9 @@ export function drawTable({
     const w = colWidths[colIdx];
     if (align) {
       const tw = font.widthOfTextAtSize(String(text ?? ""), fontSize);
-      return cx + w - tw - 4;
+      return cx + w - tw - cellPaddingX;
     }
-    return cx + 4;
+    return cx + cellPaddingX;
   }
 
   function drawHLine(pg, lineY) {
@@ -78,29 +162,40 @@ export function drawTable({
   }
 
   function drawHeaderRow(pg, rowTop) {
+    const { cellLines, height } = getRowMetrics(headers);
     pg.drawRectangle({
       x: startX,
-      y: rowTop - rowHeight,
+      y: rowTop - height,
       width: totalW,
-      height: rowHeight,
+      height,
       color: headerBg,
     });
-    for (let i = 0; i < headers.length; i++) {
-      const text = String(headers[i] ?? "");
-      const tx = cellX(i, alignRightCols.includes(i), text);
-      pg.drawText(text, { x: tx, y: textY(rowTop), size: fontSize, font, color: headerFg });
+
+    for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+      const lines = cellLines[colIdx];
+      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        const text = lines[lineIdx];
+        const tx = cellX(colIdx, alignRightCols.includes(colIdx), text);
+        const ty = rowTop - cellPaddingY - fontSize - lineIdx * lineHeight;
+        pg.drawText(text, { x: tx, y: ty, size: fontSize, font, color: headerFg });
+      }
     }
-    drawHLine(pg, rowTop - rowHeight);
+
+    drawHLine(pg, rowTop - height);
+    return height;
   }
 
   // --- Draw initial header ---
   let sectionTop = y;
-  drawHeaderRow(page, y);
-  y -= rowHeight;
+  const headerHeight = drawHeaderRow(page, y);
+  y -= headerHeight;
 
   // --- Draw rows ---
   for (let ri = 0; ri < rows.length; ri++) {
-    if (y - rowHeight < MARGIN_BOTTOM) {
+    const row = rows[ri];
+    const { cellLines, height } = getRowMetrics(row);
+
+    if (y - height < MARGIN_BOTTOM) {
       // Close vertical lines for this page section
       drawVLines(page, sectionTop, y);
 
@@ -108,32 +203,34 @@ export function drawTable({
       page = pdf.addPage([PAGE_W, PAGE_H]);
       y = PAGE_H - 40;
       sectionTop = y;
-      drawHeaderRow(page, y);
-      y -= rowHeight;
+      const newHeaderHeight = drawHeaderRow(page, y);
+      y -= newHeaderHeight;
     }
-
-    const row = rows[ri];
 
     // Alternating row background
     if (ri % 2 === 1) {
       page.drawRectangle({
         x: startX,
-        y: y - rowHeight,
+        y: y - height,
         width: totalW,
-        height: rowHeight,
+        height,
         color: rowAlt,
       });
     }
 
     // Row text
-    for (let i = 0; i < row.length; i++) {
-      const text = String(row[i] ?? "");
-      const tx = cellX(i, alignRightCols.includes(i), text);
-      page.drawText(text, { x: tx, y: textY(y), size: fontSize, font, color: textColor });
+    for (let colIdx = 0; colIdx < row.length; colIdx++) {
+      const lines = cellLines[colIdx];
+      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        const text = lines[lineIdx];
+        const tx = cellX(colIdx, alignRightCols.includes(colIdx), text);
+        const ty = y - cellPaddingY - fontSize - lineIdx * lineHeight;
+        page.drawText(text, { x: tx, y: ty, size: fontSize, font, color: textColor });
+      }
     }
 
-    drawHLine(page, y - rowHeight);
-    y -= rowHeight;
+    drawHLine(page, y - height);
+    y -= height;
   }
 
   // Vertical lines for last section
