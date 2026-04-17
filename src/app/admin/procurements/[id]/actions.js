@@ -13,6 +13,8 @@ import {
   isAllowedPaymentStatusTransition,
   PAYMENT_LABELS,
 } from "@/lib/constants";
+import { logger } from "@/lib/logger";
+import { refundsApi } from "@/lib/yookassa";
 import {
   assertOrderBelongsToProcurement,
   assertOrderCanCheckin,
@@ -183,11 +185,21 @@ export async function createPickupSession(fd) {
 
 export async function checkinOrder(fd) {
   const sessionId = str(fd, "sessionId");
-  const orderId = str(fd, "orderId");
+  let orderId = str(fd, "orderId");
   const note = str(fd, "note") || null;
 
   if (!sessionId) throw new Error("Не указана сессия выдачи.");
   if (!orderId) throw new Error("Не указана заявка.");
+
+  // Resolve 6-digit pickup code to actual order ID
+  if (/^\d{6}$/.test(orderId)) {
+    const found = await prisma.order.findUnique({
+      where: { pickupCode: orderId },
+      select: { id: true },
+    });
+    if (!found) throw new Error("Заказ с таким кодом получения не найден.");
+    orderId = found.id;
+  }
 
   const session = await getSession();
   const actorLabel = session?.email ?? "system";
@@ -209,11 +221,23 @@ export async function checkinOrder(fd) {
   });
   assertPickupSessionCanCheckin(pickupSession, procurement.id);
 
-  const existingCheckin = await prisma.pickupCheckin.findUnique({ where: { orderId } });
-  if (existingCheckin) throw new Error("Эта заявка уже выдана.");
+  // Atomic re-check + insert: re-read paymentStatus inside the transaction
+  // to close the race window where status could change between the initial
+  // assertOrderCanCheckin and the actual checkin insert.
+  await prisma.$transaction(async (tx) => {
+    const fresh = await tx.order.findUnique({
+      where: { id: orderId },
+      select: { status: true, paymentStatus: true, procurementId: true },
+    });
+    assertOrderBelongsToProcurement(fresh, procurement.id);
+    assertOrderCanCheckin(fresh);
 
-  await prisma.pickupCheckin.create({
-    data: { sessionId: pickupSession.id, orderId, note, operatorUserId },
+    const existingCheckin = await tx.pickupCheckin.findUnique({ where: { orderId } });
+    if (existingCheckin) throw new Error("Эта заявка уже выдана.");
+
+    await tx.pickupCheckin.create({
+      data: { sessionId: pickupSession.id, orderId, note, operatorUserId },
+    });
   });
 
   await writeProcurementAudit({
@@ -237,6 +261,7 @@ export async function checkinOrder(fd) {
   }
 
   revalidatePath(`/admin/procurements/${procurement.id}`);
+  revalidatePath(`/admin/checkin/${orderId}`);
 }
 
 export async function closePickupSession(_prev, fd) {
@@ -282,7 +307,10 @@ export async function updateDeliverySettings(_prev, fd) {
   const deliveryFeeRaw = str(fd, "deliveryFee");
   const deliverySplitMode = str(fd, "deliverySplitMode");
 
-  const { session, procurement, error } = await requireProcurementForAdminResult(procurementId);
+  const { session, procurement, error } = await requireProcurementForAdminResult(
+    procurementId,
+    { select: { id: true, status: true, deliveryFee: true, deliverySplitMode: true } }
+  );
   if (error) return { error };
   const actorLabel = session?.email ?? "system";
 
@@ -290,6 +318,17 @@ export async function updateDeliverySettings(_prev, fd) {
   if (isNaN(deliveryFee) || deliveryFee < 0) return { error: "Неверная стоимость доставки." };
   if (!["PROPORTIONAL_SUM", "EQUAL", "PER_ITEM"].includes(deliverySplitMode)) {
     return { error: "Неверный режим разделения." };
+  }
+
+  const changed =
+    deliveryFee !== procurement.deliveryFee ||
+    deliverySplitMode !== procurement.deliverySplitMode;
+
+  if (changed) {
+    // Block delivery changes after procurement is closed (shares are final)
+    if (procurement.status !== "OPEN") {
+      return { error: "Нельзя менять доставку после закрытия закупки." };
+    }
   }
 
   await prisma.procurement.update({
@@ -340,7 +379,7 @@ export async function updatePaymentStatus(_prev, fd) {
   if (!orderId) {
     return { ok: false, error: "Не указана заявка." };
   }
-  if (!["PAID", "PAY_ON_PICKUP", "UNPAID"].includes(paymentStatus)) {
+  if (!["PAID", "PAY_ON_PICKUP", "UNPAID", "PENDING", "FAILED", "REFUNDED"].includes(paymentStatus)) {
     return { ok: false, error: "Некорректный статус оплаты." };
   }
 
@@ -360,6 +399,12 @@ export async function updatePaymentStatus(_prev, fd) {
   const { session, procurement } = await requireProcurementForAdminAction(order.procurementId);
   const actorLabel = session?.email ?? "system";
 
+  // Defensive: guard returns the procurement looked up by order.procurementId,
+  // so they must match. Assert anyway to make tampering attempts loud.
+  if (order.procurementId !== procurement.id) {
+    return { ok: false, error: "Заявка не принадлежит этой закупке." };
+  }
+
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
     data: {
@@ -369,6 +414,18 @@ export async function updatePaymentStatus(_prev, fd) {
     },
     select: { userId: true },
   });
+
+  logger.info(
+    {
+      op: "updatePaymentStatus",
+      orderId,
+      procurementId: procurement.id,
+      actor: actorLabel,
+      from: order.paymentStatus,
+      to: paymentStatus,
+    },
+    "payment status updated"
+  );
 
   await writeOrderAudit({
     actorType: "ADMIN",
@@ -392,6 +449,96 @@ export async function updatePaymentStatus(_prev, fd) {
 
   revalidatePath(`/admin/procurements/${procurement.id}`);
   return { ok: true, message: "Статус оплаты обновлён." };
+}
+
+// ── Refund ────────────────────────────────────────────────────────────────────
+
+export async function refundPayment(_prev, fd) {
+  const orderId = str(fd, "orderId");
+  const refundAmountRaw = str(fd, "refundAmount");
+
+  if (!orderId) return { ok: false, error: "Не указана заявка." };
+
+  const refundAmount = parseInt(refundAmountRaw, 10);
+  if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+    return { ok: false, error: "Сумма возврата должна быть положительной." };
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      procurementId: true,
+      userId: true,
+      paymentStatus: true,
+      yookassaPaymentId: true,
+      goodsTotal: true,
+    },
+  });
+  if (!order) return { ok: false, error: "Заявка не найдена." };
+
+  if (order.paymentStatus !== "PAID") {
+    return { ok: false, error: "Возврат возможен только для оплаченных заказов." };
+  }
+  if (!order.yookassaPaymentId) {
+    return { ok: false, error: "Возврат возможен только для онлайн-платежей (ЮKassa)." };
+  }
+  if (refundAmount > (order.goodsTotal ?? 0)) {
+    return { ok: false, error: "Сумма возврата превышает оплаченную сумму товаров." };
+  }
+
+  const { session, procurement } = await requireProcurementForAdminAction(order.procurementId);
+  const actorLabel = session.email ?? "system";
+
+  const idempotenceKey = `refund-${order.id}-${Date.now()}`;
+  const amountValue = (refundAmount / 100).toFixed(2);
+
+  try {
+    await refundsApi.refundsPost(idempotenceKey, {
+      payment_id: order.yookassaPaymentId,
+      amount: { value: amountValue, currency: "RUB" },
+      description: `Возврат по заказу ${order.id.slice(-6)}`,
+    });
+  } catch (err) {
+    logger.error({ err, op: "refundPayment", orderId: order.id }, "refund creation failed");
+    return { ok: false, error: "Не удалось создать возврат в ЮKassa. Попробуйте позже." };
+  }
+
+  await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      paymentStatus: "REFUNDED",
+      refundedAt: new Date(),
+      refundAmount,
+    },
+  });
+
+  logger.info(
+    { op: "refundPayment", orderId: order.id, procurementId: procurement.id, refundAmount },
+    "payment refunded",
+  );
+
+  await writeOrderAudit({
+    actorType: "ADMIN",
+    actorLabel,
+    action: "ONLINE_PAYMENT_REFUNDED",
+    orderId: order.id,
+    procurementId: procurement.id,
+    meta: { refundAmount, amountValue, yookassaPaymentId: order.yookassaPaymentId },
+  });
+
+  if (order.userId) {
+    await createNotification({
+      userId: order.userId,
+      type: "PAYMENT_STATUS_CHANGED",
+      title: "Возврат средств",
+      body: `Возврат на сумму ${amountValue} ₽ по вашему заказу успешно оформлен.`,
+      linkUrl: `/my/orders/${order.id}`,
+    });
+  }
+
+  revalidatePath(`/admin/procurements/${procurement.id}`);
+  return { ok: true, message: "Возврат оформлен." };
 }
 
 // ── Receiving / finalize ───────────────────────────────────

@@ -52,7 +52,7 @@ export default async function ProcurementsPage({ searchParams }) {
     await Promise.all([
       prisma.supplier.findMany({
         orderBy: [{ createdAt: "desc" }],
-        select: { id: true, name: true, minOrderSum: true },
+        select: { id: true, name: true, minOrderSum: true, deliveryFee: true },
       }),
       prisma.settlement.findMany({
         orderBy: [{ name: "asc" }],

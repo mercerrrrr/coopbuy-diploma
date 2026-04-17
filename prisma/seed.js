@@ -28,6 +28,7 @@ async function main() {
     { name: "Солнечное", regionIdx: 0 },
     { name: "Новый Берег", regionIdx: 0 },
     { name: "Заречный", regionIdx: 0 },
+    { name: "Новолесное", regionIdx: 0 },
   ];
   const settlements = [];
   for (const s of settlementDefs) {
@@ -46,6 +47,7 @@ async function main() {
     { name: "ПВЗ Центральный", address: "ул. Центральная, 1", hasFreezer: false, sIdx: 0 },
     { name: "ПВЗ Северный", address: "пр. Северный, 12", hasFreezer: false, sIdx: 1 },
     { name: "ПВЗ Холодный", address: "ул. Ледовая, 5", hasFreezer: true, sIdx: 2 },
+    { name: "ПВЗ Лесной", address: "ул. Лесная, 8", hasFreezer: false, sIdx: 3 },
   ];
   const pickupPoints = [];
   for (const d of ppDefs) {
@@ -76,9 +78,9 @@ async function main() {
 
   // ── 6. Поставщики (3: 2 активных, 1 неактивный) ──────────────────────────
   const supplierDefs = [
-    { name: "АгроОпт-Юг",   phone: "+7(900)100-01-01", email: "agro@coopbuy.test",   minOrderSum: 8000,  isActive: true  },
-    { name: "СберПоставка", phone: "+7(900)100-01-02", email: "sber@coopbuy.test",   minOrderSum: 5000,  isActive: true  },
-    { name: "НеАктивный",   phone: "+7(900)100-01-03", email: "closed@coopbuy.test", minOrderSum: 10000, isActive: false },
+    { name: "АгроОпт-Юг",   phone: "+7(900)100-01-01", email: "agro@coopbuy.test",   minOrderSum: 8000,  deliveryFee: 1200, isActive: true  },
+    { name: "СберПоставка", phone: "+7(900)100-01-02", email: "sber@coopbuy.test",   minOrderSum: 5000,  deliveryFee: 600,  isActive: true  },
+    { name: "НеАктивный",   phone: "+7(900)100-01-03", email: "closed@coopbuy.test", minOrderSum: 10000, deliveryFee: 0,    isActive: false },
   ];
   const suppliers = [];
   for (const d of supplierDefs) {
@@ -89,7 +91,7 @@ async function main() {
 
   // ── 7. Зоны доставки (2 активных поставщика × все settlement пилота) ────
   for (const supIdx of [0, 1]) {
-    for (const sIdx of [0, 1, 2]) {
+    for (const sIdx of [0, 1, 2, 3]) {
       await prisma.supplierDeliveryZone.upsert({
         where: { supplierId_settlementId: { supplierId: suppliers[supIdx].id, settlementId: settlements[sIdx].id } },
         update: { isActive: true },
@@ -231,6 +233,32 @@ async function main() {
     },
   });
 
+  const user6 = await prisma.user.upsert({
+    where: { email: "user6@local.test" },
+    update: {},
+    create: {
+      email: "user6@local.test",
+      passwordHash: await hash("User123!"),
+      fullName: "Дмитрий Волков",
+      phone: "+7(900)200-00-06",
+      role: "RESIDENT",
+      settlementId: settlements[3].id,
+    },
+  });
+
+  const user7 = await prisma.user.upsert({
+    where: { email: "user7@local.test" },
+    update: {},
+    create: {
+      email: "user7@local.test",
+      passwordHash: await hash("User123!"),
+      fullName: "Ольга Новикова",
+      phone: "+7(900)200-00-07",
+      role: "RESIDENT",
+      settlementId: settlements[3].id,
+    },
+  });
+
   // ── 10. Закупки (3: 2 OPEN, 1 CLOSED) ────────────────────────────────────
   const procDefs = [
     {
@@ -267,6 +295,17 @@ async function main() {
       pickupWindowEnd:   new Date("2026-01-25T18:00:00Z"),
       pickupInstructions: "Закупка завершена. Все заказы выданы.",
     },
+    {
+      inviteCode: "SEED-NOVOLESNOYE",
+      title: "Закупка №4 — АгроОпт Новолесное",
+      status: "OPEN",
+      deadlineAt: days(10),
+      deliveryFee: 1200,
+      deliverySplitMode: "PROPORTIONAL_SUM",
+      supplierIdx: 0, settlementIdx: 3, pickupIdx: 3,
+      pickupWindowStart: days(14), pickupWindowEnd: days(16),
+      pickupInstructions: "ПВЗ Лесной, ул. Лесная 8. Приходите с 10:00 до 18:00 с QR-кодом.",
+    },
   ];
   const procurements = [];
   for (const d of procDefs) {
@@ -295,12 +334,14 @@ async function main() {
 
   // ── 11. Заявки (6 SUBMITTED) ──────────────────────────────────────────────
   const orderDefs = [
-    { proc: 0, user: user1, items: [[0,2],[4,1],[8,1]], paymentStatus: "PAID",         paidAt: new Date("2026-02-20"), paymentMethod: "Перевод" },
-    { proc: 0, user: user2, items: [[1,1],[5,2]],        paymentStatus: "PAY_ON_PICKUP" },
-    { proc: 0, user: user5, items: [[2,3],[9,2]],        paymentStatus: "UNPAID" },
-    { proc: 1, user: user3, items: [[10,2],[11,1],[12,1]], paymentStatus: "PAID",       paidAt: new Date("2026-02-22"), paymentMethod: "Наличные" },
-    { proc: 1, user: user4, items: [[13,2],[14,3]],       paymentStatus: "UNPAID" },
-    { proc: 2, user: user1, items: [[0,2],[4,1]],         paymentStatus: "PAID",       paidAt: new Date("2026-01-22"), paymentMethod: "Перевод" },
+    { proc: 0, user: user1, items: [[0,2],[4,1],[8,1]], paymentStatus: "PAID",         paidAt: new Date("2026-02-20"), paymentMethod: "Перевод",  pickupCode: "100001" },
+    { proc: 0, user: user2, items: [[1,1],[5,2]],        paymentStatus: "PAY_ON_PICKUP", pickupCode: "100002" },
+    { proc: 0, user: user5, items: [[2,3],[9,2]],        paymentStatus: "UNPAID",        pickupCode: "100003" },
+    { proc: 1, user: user3, items: [[10,2],[11,1],[12,1]], paymentStatus: "PAID",       paidAt: new Date("2026-02-22"), paymentMethod: "Наличные", pickupCode: "100004" },
+    { proc: 1, user: user4, items: [[13,2],[14,3]],       paymentStatus: "UNPAID",      pickupCode: "100005" },
+    { proc: 2, user: user1, items: [[0,2],[4,1]],         paymentStatus: "PAID",       paidAt: new Date("2026-01-22"), paymentMethod: "Перевод",  pickupCode: "100006" },
+    { proc: 3, user: user6, items: [[0,3],[4,2],[6,1],[8,1]], paymentStatus: "PAID",  paidAt: new Date("2026-04-12"), paymentMethod: "Карта",    pickupCode: "100007" },
+    { proc: 3, user: user7, items: [[1,2],[5,1],[9,2]],       paymentStatus: "UNPAID",                                                            pickupCode: "100008" },
   ];
 
   const orders = [];
@@ -329,6 +370,7 @@ async function main() {
         paymentStatus: d.paymentStatus,
         paidAt: d.paidAt ?? null,
         paymentMethod: d.paymentMethod ?? null,
+        pickupCode: d.pickupCode,
         items: { create: items },
       },
     });
@@ -421,6 +463,23 @@ async function main() {
     }
   }
 
+  // Уведомления для жителей Новолесного
+  for (const user of [user6, user7]) {
+    const existingCount = await prisma.notification.count({ where: { userId: user.id } });
+    if (existingCount === 0) {
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          type: "PROCUREMENT_CREATED",
+          title: "Новая закупка открыта",
+          body: "Закупка «Закупка №4 — АгроОпт Новолесное» открыта для заявок.",
+          linkUrl: "/p/SEED-NOVOLESNOYE",
+        },
+      });
+      notifCreated++;
+    }
+  }
+
   // ── 15. Журнал действий ──────────────────────────────────────────────────
   const auditCount = await prisma.auditLog.count();
   if (auditCount < 5) {
@@ -442,6 +501,9 @@ async function main() {
         { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "UPDATE_PAYMENT_STATUS", entityType: "ORDER",       entityId: orders[0]?.id ?? "n/a", meta: { procurementId: procurements[0].id, paymentStatus: "PAID" } },
         { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "CREATE_RECEIVING",      entityType: "PROCUREMENT", entityId: closedProc.id,           meta: { reportId: receivingReportId } },
         { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "FINALIZE_RECEIVING",    entityType: "PROCUREMENT", entityId: closedProc.id,           meta: { reportId: receivingReportId } },
+        { actorType: "ADMIN",  actorLabel: "admin@local.test",     action: "CREATE_PROCUREMENT",    entityType: "PROCUREMENT", entityId: procurements[3]?.id ?? "n/a", meta: { title: "Закупка №4 — АгроОпт Новолесное" } },
+        { actorType: "PUBLIC", actorLabel: "user6@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[6]?.id ?? "n/a", meta: { procurementId: procurements[3]?.id ?? "n/a" } },
+        { actorType: "PUBLIC", actorLabel: "user7@local.test",     action: "SUBMIT_ORDER",          entityType: "ORDER",       entityId: orders[7]?.id ?? "n/a", meta: { procurementId: procurements[3]?.id ?? "n/a" } },
       ],
     });
   }
@@ -455,7 +517,7 @@ async function main() {
   console.log(`  ед. изм.:     ${units.length}`);
   console.log(`  поставщики:   ${suppliers.length} (2 активных, 1 неактивный)`);
   console.log(`  товары:       ${products.length}`);
-  console.log(`  закупки:      ${procurements.length} (2 OPEN, 1 CLOSED)`);
+  console.log(`  закупки:      ${procurements.length} (3 OPEN, 1 CLOSED)`);
   console.log(`  заявки:       ${orders.length} SUBMITTED`);
   console.log(`  checkins:     ${checkinCount}`);
   console.log(`  уведомления:  ${notifCreated}`);
@@ -465,7 +527,11 @@ async function main() {
   console.log("  RESIDENT: user1@local.test     / User123!");
   console.log("  RESIDENT: user2@local.test     / User123!");
   console.log("  RESIDENT: user3@local.test     / User123!");
-  console.log("  RESIDENT: user4@local.test     / User123!\n");
+  console.log("  RESIDENT: user4@local.test     / User123!");
+  console.log("  RESIDENT: user5@local.test     / User123!");
+  console.log("  RESIDENT: user6@local.test     / User123!  (Новолесное)");
+  console.log("  RESIDENT: user7@local.test     / User123!  (Новолесное)\n");
+  console.log("Закупка Новолесное: /p/SEED-NOVOLESNOYE (user6, user7)");
 }
 
 main()

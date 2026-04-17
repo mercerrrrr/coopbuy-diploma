@@ -49,6 +49,7 @@ export function CreateProcurementForm({
 
   const [supplierId, setSupplierId] = useState("");
   const [settlementId, setSettlementId] = useState(operatorSettlementId ?? "");
+  const [deliveryFeeValue, setDeliveryFeeValue] = useState("0");
 
   const isOperator = Boolean(operatorPickupPointId);
 
@@ -56,6 +57,13 @@ export function CreateProcurementForm({
     const s = suppliers.find((x) => x.id === supplierId);
     return s ? String(s.minOrderSum) : "0";
   }, [supplierId, suppliers]);
+
+  const handleSupplierChange = (e) => {
+    const newId = e.target.value;
+    setSupplierId(newId);
+    const s = suppliers.find((x) => x.id === newId);
+    if (s) setDeliveryFeeValue(String(s.deliveryFee ?? 0));
+  };
 
   const filteredPickupPoints = useMemo(() => {
     return pickupPoints.filter((p) => p.settlementId === settlementId);
@@ -105,7 +113,7 @@ export function CreateProcurementForm({
                 name="supplierId"
                 className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
                 value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
+                onChange={handleSupplierChange}
               >
                 <option value="" disabled>
                   Поставщик…
@@ -277,10 +285,16 @@ export function CreateProcurementForm({
                 <input
                   id="procurement-delivery-fee"
                   name="deliveryFee"
-                  defaultValue="0"
+                  value={deliveryFeeValue}
+                  onChange={(e) => setDeliveryFeeValue(e.target.value)}
                   placeholder="0"
                   className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300"
                 />
+                {supplierId && (
+                  <p className="text-xs text-zinc-500">
+                    Подтянуто из карточки поставщика. Можно изменить.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">

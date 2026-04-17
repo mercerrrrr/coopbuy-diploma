@@ -52,9 +52,14 @@ describe("assertOrderCanCheckin()", () => {
     expect(() => assertOrderCanCheckin(order)).toThrow("подтверждённую");
   });
 
-  it("бросает ошибку если paymentStatus UNPAID", () => {
+  it("не бросает исключение для SUBMITTED + UNPAID (доставка при получении)", () => {
     const order = { status: "SUBMITTED", paymentStatus: "UNPAID" };
-    expect(() => assertOrderCanCheckin(order)).toThrow("не оплачена");
+    expect(() => assertOrderCanCheckin(order)).not.toThrow();
+  });
+
+  it("бросает ошибку если paymentStatus REFUNDED", () => {
+    const order = { status: "SUBMITTED", paymentStatus: "REFUNDED" };
+    expect(() => assertOrderCanCheckin(order)).toThrow("возвратом");
   });
 
   it("бросает ошибку если order равен null", () => {

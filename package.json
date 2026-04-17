@@ -7,8 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest",
+    "test": "vitest run && vitest run --config vitest.integration.config.js",
     "test:run": "vitest run",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.js",
     "db:reset": "npx prisma migrate reset --force"
   },
   "dependencies": {
@@ -16,6 +19,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
+    "@yookassa/sdk": "^0.0.3",
     "bcryptjs": "^3.0.3",
     "dejavu-fonts-ttf": "^2.37.3",
     "exceljs": "^4.4.0",
@@ -26,6 +30,7 @@
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.17.2",
     "pg": "^8.16.3",
+    "pino": "^10.3.1",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",

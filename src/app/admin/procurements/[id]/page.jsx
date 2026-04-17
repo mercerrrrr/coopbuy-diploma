@@ -16,6 +16,7 @@ import {
   updateDeliverySettings,
   recalcShares,
   updatePaymentStatus,
+  refundPayment,
 } from "./actions";
 import { ConfirmForm, ReceivingLineRow } from "./ReceivingForms";
 import {
@@ -146,6 +147,9 @@ export default async function ProcurementDetailPage({ params }) {
 
   const checkinCount = pickupSession?.checkins.length ?? 0;
   const sessionClosed = pickupSession?.status === "CLOSED";
+  const isAdmin = session.role === "ADMIN";
+  const isOperator = session.role === "OPERATOR";
+  const isAdminOrOperator = isAdmin || isOperator;
 
   return (
     <main className="cb-shell space-y-4 py-1">
@@ -160,14 +164,14 @@ export default async function ProcurementDetailPage({ params }) {
         eyebrow="Операционный центр / карточка закупки"
         title={procurement.title}
         description={`${procurement.supplier.name} · ${procurement.settlement.region.name}, ${procurement.settlement.name} · ${procurement.pickupPoint.name}`}
-        actions={
+        actions={isAdminOrOperator ? (
           <Link
             href={`/admin/procurements/${id}/report`}
             className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--cb-line-strong)] bg-white px-3 py-2 text-sm font-medium text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
           >
             Отчёт по закупке
           </Link>
-        }
+        ) : null}
         meta={
           <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3">
             <div className="cb-kicker">Собрано</div>
@@ -181,13 +185,16 @@ export default async function ProcurementDetailPage({ params }) {
         }
       />
 
-      <div className="grid gap-2 md:grid-cols-5">
+      <div className="flex flex-wrap gap-2">
         {[
           { href: "#overview", label: "Сводка" },
-          { href: "#payments", label: "Оплата" },
-          { href: "#pickup", label: "Выдача" },
-          { href: "#receiving", label: "Приёмка" },
-          { href: "#orders", label: "Заказы и журнал" },
+          ...(isAdminOrOperator ? [
+            { href: "#payments", label: "Оплата" },
+            { href: "#pickup", label: "Выдача" },
+            { href: "#receiving", label: "Приёмка" },
+          ] : []),
+          { href: "#orders", label: "Заказы" },
+          ...(isAdminOrOperator ? [{ href: "#audit", label: "Журнал" }] : []),
         ].map((item) => (
           <a
             key={item.href}
@@ -272,21 +279,23 @@ export default async function ProcurementDetailPage({ params }) {
               <div className="font-medium text-zinc-900">{procurement.pickupInstructions}</div>
             </div>
           )}
-          <div className="sm:col-span-2">
-            <div className="text-xs text-zinc-400 mb-0.5">Invite-ссылка</div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <code className="text-xs bg-zinc-100 rounded px-2 py-0.5 text-zinc-700 font-mono break-all">
-                {baseUrl}/p/{procurement.inviteCode}
-              </code>
-              <CopyLinkButton textToCopy={`${baseUrl}/p/${procurement.inviteCode}`} label="Скопировать" />
-              <Link
-                href={`/p/${procurement.inviteCode}`}
-                className="text-xs text-indigo-600 hover:text-indigo-700 underline"
-              >
-                Открыть →
-              </Link>
+          {isAdminOrOperator && (
+            <div className="sm:col-span-2">
+              <div className="text-xs text-zinc-400 mb-0.5">Invite-ссылка</div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <code className="text-xs bg-zinc-100 rounded px-2 py-0.5 text-zinc-700 font-mono break-all">
+                  {baseUrl}/p/{procurement.inviteCode}
+                </code>
+                <CopyLinkButton textToCopy={`${baseUrl}/p/${procurement.inviteCode}`} label="Скопировать" />
+                <Link
+                  href={`/p/${procurement.inviteCode}`}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 underline"
+                >
+                  Открыть →
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
         </CardBody>
       </Card>
 
@@ -332,7 +341,7 @@ export default async function ProcurementDetailPage({ params }) {
       </Card>
 
       {/* Delivery & Payment */}
-      <Card id="payments">
+      {isAdminOrOperator && <Card id="payments">
         <CardHeader>
           <CardTitle>Доставка и оплата</CardTitle>
           <div className="flex items-center gap-2">
@@ -377,12 +386,14 @@ export default async function ProcurementDetailPage({ params }) {
               orders={submittedOrders}
               procurementId={id}
               updatePaymentStatus={updatePaymentStatus}
+              refundPayment={refundPayment}
             />
           )}
         </CardBody>
-      </Card>
+      </Card>}
 
       {/* Aggregate supplier order */}
+      {isAdminOrOperator &&
       <Card>
         <CardHeader>
           <CardTitle>Агрегированный заказ поставщику</CardTitle>
@@ -462,10 +473,10 @@ export default async function ProcurementDetailPage({ params }) {
             </div>
           )}
         </CardBody>
-      </Card>
+      </Card>}
 
       {/* Pickup */}
-      <Card id="pickup">
+      {isAdminOrOperator && <Card id="pickup">
         <CardHeader>
           <div className="flex items-center gap-2 flex-wrap">
             <CardTitle>Выдача</CardTitle>
@@ -580,10 +591,10 @@ export default async function ProcurementDetailPage({ params }) {
             </div>
           )}
         </CardBody>
-      </Card>
+      </Card>}
 
       {/* Receiving report */}
-      <Card id="receiving">
+      {isAdminOrOperator && <Card id="receiving">
         <CardHeader>
           <div className="flex items-center gap-2 flex-wrap">
             <CardTitle>Приёмка поставки</CardTitle>
@@ -671,7 +682,7 @@ export default async function ProcurementDetailPage({ params }) {
             </div>
           )}
         </CardBody>
-      </Card>
+      </Card>}
 
       {/* Orders detail list */}
       <Card id="orders">
@@ -761,47 +772,49 @@ export default async function ProcurementDetailPage({ params }) {
       </Card>
 
       {/* Audit log */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Журнал действий</CardTitle>
-        </CardHeader>
-        <CardBody>
-          {auditLogs.length === 0 ? (
-            <p className="text-sm text-zinc-400 py-4 text-center">Нет записей.</p>
-          ) : (
-            <ul className="space-y-0.5">
-              {auditLogs.map((log) => {
-                const actorRole =
-                  log.meta && typeof log.meta === "object" && "actorRole" in log.meta
-                    ? log.meta.actorRole
-                    : null;
-                const displayActor = actorRole ?? log.actorType;
+      {isAdminOrOperator && (
+        <Card id="audit">
+          <CardHeader>
+            <CardTitle>Журнал действий</CardTitle>
+          </CardHeader>
+          <CardBody>
+            {auditLogs.length === 0 ? (
+              <p className="text-sm text-zinc-400 py-4 text-center">Нет записей.</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {auditLogs.map((log) => {
+                  const actorRole =
+                    log.meta && typeof log.meta === "object" && "actorRole" in log.meta
+                      ? log.meta.actorRole
+                      : null;
+                  const displayActor = actorRole ?? log.actorType;
 
-                return (
-                <li
-                  key={log.id}
-                  className="flex flex-wrap gap-2 text-xs py-2 border-b border-zinc-100 last:border-0"
-                >
-                  <span className="text-zinc-400 shrink-0">
-                    {new Date(log.createdAt).toLocaleString("ru-RU")}
-                  </span>
-                  <span
-                    className={
-                      log.actorType === "ADMIN"
-                        ? "font-medium text-zinc-700"
-                        : "text-zinc-500"
-                    }
+                  return (
+                  <li
+                    key={log.id}
+                    className="flex flex-wrap gap-2 text-xs py-2 border-b border-zinc-100 last:border-0"
                   >
-                    [{displayActor}] {log.actorLabel}
-                  </span>
-                  <code className="text-indigo-600 font-mono">{log.action}</code>
-                </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardBody>
-      </Card>
+                    <span className="text-zinc-400 shrink-0">
+                      {new Date(log.createdAt).toLocaleString("ru-RU")}
+                    </span>
+                    <span
+                      className={
+                        log.actorType === "ADMIN"
+                          ? "font-medium text-zinc-700"
+                          : "text-zinc-500"
+                      }
+                    >
+                      [{displayActor}] {log.actorLabel}
+                    </span>
+                    <code className="text-indigo-600 font-mono">{log.action}</code>
+                  </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      )}
     </main>
   );
 }

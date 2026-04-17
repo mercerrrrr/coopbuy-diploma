@@ -1,0 +1,226 @@
+// CoopBuy — доменная модель БД
+// Импорт: https://dbdiagram.io/d → Import → From DBML
+
+Table Region {
+  id        varchar [pk]
+  name      varchar [unique, not null]
+  createdAt datetime
+}
+
+Table Settlement {
+  id        varchar [pk]
+  name      varchar [not null]
+  regionId  varchar [ref: > Region.id, not null]
+  createdAt datetime
+
+  Indexes {
+    (regionId, name) [unique]
+  }
+}
+
+Table PickupPoint {
+  id           varchar [pk]
+  name         varchar [not null]
+  address      varchar [not null]
+  hasFreezer   boolean
+  settlementId varchar [ref: > Settlement.id, not null]
+}
+
+Table User {
+  id            varchar [pk]
+  email         varchar [unique, not null]
+  passwordHash  varchar [not null]
+  fullName      varchar [not null]
+  phone         varchar
+  role          UserRole [not null]
+  settlementId  varchar [ref: > Settlement.id]
+  pickupPointId varchar [ref: > PickupPoint.id]
+}
+
+Table Supplier {
+  id          varchar [pk]
+  name        varchar [unique, not null]
+  minOrderSum int
+  phone       varchar
+  email       varchar
+  isActive    boolean
+}
+
+Table SupplierDeliveryZone {
+  id           varchar [pk]
+  supplierId   varchar [ref: > Supplier.id, not null]
+  settlementId varchar [ref: > Settlement.id, not null]
+  isActive     boolean
+
+  Indexes {
+    (supplierId, settlementId) [unique]
+  }
+}
+
+Table Category {
+  id   varchar [pk]
+  name varchar [unique, not null]
+}
+
+Table Unit {
+  id   varchar [pk]
+  name varchar [unique, not null]
+}
+
+Table Product {
+  id         varchar [pk]
+  name       varchar [not null]
+  price      int [not null]
+  sku        varchar
+  imageUrl   varchar
+  isActive   boolean
+  supplierId varchar [ref: > Supplier.id, not null]
+  categoryId varchar [ref: > Category.id, not null]
+  unitId     varchar [ref: > Unit.id, not null]
+}
+
+Table Procurement {
+  id                varchar [pk]
+  status            ProcurementStatus [not null]
+  title             varchar [not null]
+  inviteCode        varchar [unique, not null]
+  deadlineAt        datetime [not null]
+  minTotalSum       int
+  pickupWindowStart datetime
+  pickupWindowEnd   datetime
+  deliveryFee       int
+  deliverySplitMode DeliverySplitMode
+  supplierId        varchar [ref: > Supplier.id, not null]
+  settlementId      varchar [ref: > Settlement.id, not null]
+  pickupPointId     varchar [ref: > PickupPoint.id, not null]
+}
+
+Table Order {
+  id               varchar [pk]
+  status           OrderStatus [not null]
+  guestId          varchar
+  userId           varchar [ref: > User.id]
+  participantName  varchar
+  participantPhone varchar
+  procurementId    varchar [ref: > Procurement.id, not null]
+  goodsTotal       int
+  deliveryShare    int
+  grandTotal       int
+  paymentStatus    PaymentStatus
+  paidAt           datetime
+  paymentMethod    varchar
+}
+
+Table OrderItem {
+  id        varchar [pk]
+  orderId   varchar [ref: > Order.id, not null]
+  productId varchar [ref: > Product.id, not null]
+  qty       int [not null]
+  price     int [not null]
+}
+
+Table ReceivingReport {
+  id            varchar [pk]
+  status        ReceivingStatus [not null]
+  notes         varchar
+  procurementId varchar [ref: - Procurement.id, unique, not null]
+}
+
+Table ReceivingLine {
+  id          varchar [pk]
+  reportId    varchar [ref: > ReceivingReport.id, not null]
+  productId   varchar [ref: > Product.id, not null]
+  expectedQty int [not null]
+  receivedQty int [not null]
+  comment     varchar
+}
+
+Table PickupSession {
+  id            varchar [pk]
+  status        PickupSessionStatus [not null]
+  startAt       datetime
+  endAt         datetime
+  procurementId varchar [ref: - Procurement.id, unique, not null]
+}
+
+Table PickupCheckin {
+  id             varchar [pk]
+  checkedAt      datetime [not null]
+  note           varchar
+  sessionId      varchar [ref: > PickupSession.id, not null]
+  orderId        varchar [ref: - Order.id, unique, not null]
+  operatorUserId varchar
+}
+
+Enum UserRole {
+  ADMIN
+  OPERATOR
+  RESIDENT
+}
+
+Enum ProcurementStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELED
+}
+
+Enum OrderStatus {
+  DRAFT
+  SUBMITTED
+  CANCELED
+}
+
+Enum ReceivingStatus {
+  DRAFT
+  FINAL
+}
+
+Enum PickupSessionStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+Enum PaymentStatus {
+  UNPAID
+  PAID
+  PAY_ON_PICKUP
+}
+
+Enum DeliverySplitMode {
+  PROPORTIONAL_SUM
+  EQUAL
+  PER_ITEM
+}
+
+TableGroup География {
+  Region
+  Settlement
+  PickupPoint
+}
+
+TableGroup Каталог {
+  Supplier
+  Category
+  Unit
+  Product
+  SupplierDeliveryZone
+}
+
+TableGroup Пользователи {
+  User
+}
+
+TableGroup Сделка {
+  Procurement
+  Order
+  OrderItem
+}
+
+TableGroup "Приёмка и выдача" {
+  ReceivingReport
+  ReceivingLine
+  PickupSession
+  PickupCheckin
+}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowSquareOut, Buildings, MapPin, Package } from "@phosphor-icons/react/ssr";
 import { prisma } from "@/lib/db";
+import { assertOperatorOrAdmin } from "@/lib/guards";
 import {
   createSupplier,
   toggleSupplierActive,
@@ -19,6 +20,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function SuppliersPage() {
+  const session = await assertOperatorOrAdmin();
+  const isAdmin = session.role === "ADMIN";
   const [settlementsRaw, suppliers, categories, units] = await Promise.all([
     prisma.settlement.findMany({
       orderBy: [{ name: "asc" }],
@@ -62,14 +65,16 @@ export default async function SuppliersPage() {
         }
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Добавить поставщика</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <CreateSupplierForm action={createSupplier} />
-        </CardBody>
-      </Card>
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Добавить поставщика</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <CreateSupplierForm action={createSupplier} />
+          </CardBody>
+        </Card>
+      )}
 
       {suppliers.length === 0 && (
         <div className="cb-panel-strong rounded-[1.1rem]">
@@ -92,10 +97,20 @@ export default async function SuppliersPage() {
                     {supplier.isActive ? "Активен" : "Отключён"}
                   </Badge>
                 </div>
-                <div className="mt-1 text-sm text-[color:var(--cb-text-soft)]">
-                  Мин. сумма заказа:{" "}
-                  <span className="font-medium text-[color:var(--cb-text)]">
-                    {supplier.minOrderSum.toLocaleString("ru-RU")} ₽
+                <div className="mt-1 flex flex-wrap gap-x-4 text-sm text-[color:var(--cb-text-soft)]">
+                  <span>
+                    Мин. сумма заказа:{" "}
+                    <span className="font-medium text-[color:var(--cb-text)]">
+                      {supplier.minOrderSum.toLocaleString("ru-RU")} ₽
+                    </span>
+                  </span>
+                  <span>
+                    Доставка:{" "}
+                    <span className="font-medium text-[color:var(--cb-text)]">
+                      {supplier.deliveryFee > 0
+                        ? `${supplier.deliveryFee.toLocaleString("ru-RU")} ₽`
+                        : "бесплатно"}
+                    </span>
                   </span>
                 </div>
                 {(supplier.phone || supplier.email) && (
@@ -113,14 +128,16 @@ export default async function SuppliersPage() {
                   <ArrowSquareOut size={14} />
                   Импорт CSV
                 </Link>
-                <ActionButtonForm
-                  action={toggleSupplierActive}
-                  hiddenFields={{ id: supplier.id }}
-                  label={supplier.isActive ? "Отключить" : "Включить"}
-                  pendingLabel="Сохраняем..."
-                  size="sm"
-                />
-                <DeleteSupplierButton supplierId={supplier.id} action={deleteSupplier} />
+                {isAdmin && (
+                  <ActionButtonForm
+                    action={toggleSupplierActive}
+                    hiddenFields={{ id: supplier.id }}
+                    label={supplier.isActive ? "Отключить" : "Включить"}
+                    pendingLabel="Сохраняем..."
+                    size="sm"
+                  />
+                )}
+                {isAdmin && <DeleteSupplierButton supplierId={supplier.id} action={deleteSupplier} />}
               </div>
             </CardHeader>
 
@@ -132,11 +149,13 @@ export default async function SuppliersPage() {
                     Зоны доставки
                   </div>
 
-                  <AddDeliveryZoneForm
-                    action={addDeliveryZone}
-                    supplierId={supplier.id}
-                    settlements={settlements}
-                  />
+                  {isAdmin && (
+                    <AddDeliveryZoneForm
+                      action={addDeliveryZone}
+                      supplierId={supplier.id}
+                      settlements={settlements}
+                    />
+                  )}
 
                   {supplier.zones.length === 0 ? (
                     <p className="py-3 text-center text-sm text-[color:var(--cb-text-faint)]">
@@ -159,7 +178,7 @@ export default async function SuppliersPage() {
                               </Badge>
                             </span>
                           </div>
-                          <DeleteZoneButton zoneId={zone.id} action={deleteDeliveryZone} />
+                          {isAdmin && <DeleteZoneButton zoneId={zone.id} action={deleteDeliveryZone} />}
                         </li>
                       ))}
                     </ul>
@@ -175,12 +194,14 @@ export default async function SuppliersPage() {
                     </span>
                   </div>
 
-                  <CreateProductForm
-                    action={createProduct}
-                    supplierId={supplier.id}
-                    categories={categories}
-                    units={units}
-                  />
+                  {isAdmin && (
+                    <CreateProductForm
+                      action={createProduct}
+                      supplierId={supplier.id}
+                      categories={categories}
+                      units={units}
+                    />
+                  )}
 
                   {supplier.products.length === 0 ? (
                     <p className="py-3 text-center text-sm text-[color:var(--cb-text-faint)]">
@@ -196,7 +217,7 @@ export default async function SuppliersPage() {
                             <th className="px-3 py-2.5 font-medium">Ед.</th>
                             <th className="px-3 py-2.5 text-right font-medium">Цена, ₽</th>
                             <th className="px-3 py-2.5 font-medium">SKU</th>
-                            <th className="px-3 py-2.5 font-medium" />
+                            {isAdmin && <th className="px-3 py-2.5 font-medium" />}
                           </tr>
                         </thead>
                         <tbody>
@@ -217,9 +238,11 @@ export default async function SuppliersPage() {
                               <td className="px-3 py-2.5 font-mono text-xs text-[color:var(--cb-text-faint)]">
                                 {product.sku ?? "—"}
                               </td>
-                              <td className="px-3 py-2.5">
-                                <DeleteProductButton productId={product.id} action={deleteProduct} />
-                              </td>
+                              {isAdmin && (
+                                <td className="px-3 py-2.5">
+                                  <DeleteProductButton productId={product.id} action={deleteProduct} />
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>

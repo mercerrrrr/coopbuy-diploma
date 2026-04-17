@@ -3,27 +3,31 @@
 import { prisma } from "@/lib/db";
 import { str, num, prismaNiceError } from "@/lib/formUtils";
 import { revalidatePath } from "next/cache";
-import { assertAdmin } from "@/lib/guards";
+import { assertAdmin, assertOperatorOrAdmin } from "@/lib/guards";
+import { logger } from "@/lib/logger";
 
 export async function createSupplier(_prev, fd) {
   await assertAdmin();
   const name = str(fd, "name");
   const minOrderSum = Math.trunc(num(fd, "minOrderSum"));
+  const deliveryFee = Math.trunc(num(fd, "deliveryFee"));
   const phone = str(fd, "phone") || null;
   const email = str(fd, "email") || null;
 
   if (!name) return { ok: false, message: "Название поставщика не может быть пустым." };
   if (!Number.isFinite(minOrderSum) || minOrderSum < 0)
     return { ok: false, message: "Минимальная сумма должна быть числом ≥ 0." };
+  if (!Number.isFinite(deliveryFee) || deliveryFee < 0)
+    return { ok: false, message: "Стоимость доставки должна быть числом ≥ 0." };
 
   try {
     await prisma.supplier.create({
-      data: { name, minOrderSum, phone, email, isActive: true },
+      data: { name, minOrderSum, deliveryFee, phone, email, isActive: true },
     });
     revalidatePath("/admin/suppliers");
     return { ok: true, message: "Поставщик добавлен." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/suppliers" }, "supplier action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -55,7 +59,7 @@ export async function deleteSupplier(_prev, fd) {
     revalidatePath("/admin/suppliers");
     return { ok: true, message: "Поставщик удалён." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/suppliers" }, "supplier action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -78,7 +82,7 @@ export async function addDeliveryZone(_prev, fd) {
     revalidatePath("/admin/suppliers");
     return { ok: true, message: "Зона доставки добавлена." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/suppliers" }, "supplier action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -93,13 +97,13 @@ export async function deleteDeliveryZone(_prev, fd) {
     revalidatePath("/admin/suppliers");
     return { ok: true, message: "Зона доставки удалена." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/suppliers" }, "supplier action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
 
 export async function createProduct(_prev, fd) {
-  await assertAdmin();
+  await assertOperatorOrAdmin();
   const supplierId = str(fd, "supplierId");
   const name = str(fd, "name");
   const categoryId = str(fd, "categoryId");
@@ -136,13 +140,13 @@ export async function createProduct(_prev, fd) {
     revalidatePath("/admin/suppliers");
     return { ok: true, message: "Товар добавлен." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/suppliers" }, "supplier action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
 
 export async function deleteProduct(_prev, fd) {
-  await assertAdmin();
+  await assertOperatorOrAdmin();
   const id = str(fd, "id");
   if (!id) return { ok: false, message: "Не передан товар." };
 
@@ -151,7 +155,7 @@ export async function deleteProduct(_prev, fd) {
     revalidatePath("/admin/suppliers");
     return { ok: true, message: "Товар удалён." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/suppliers" }, "supplier action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }

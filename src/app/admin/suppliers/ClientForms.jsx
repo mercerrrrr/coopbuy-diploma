@@ -33,6 +33,7 @@ export function CreateSupplierForm({ action }) {
       <form action={formAction} className="mt-3 grid gap-3 md:grid-cols-2">
         <input name="name" placeholder="Название поставщика" className={inputClassName} />
         <input name="minOrderSum" placeholder="Минимальная сумма заказа" className={inputClassName} />
+        <input name="deliveryFee" placeholder="Стоимость доставки, ₽" className={inputClassName} />
         <input name="phone" placeholder="Телефон" className={inputClassName} />
         <input name="email" placeholder="Email" className={inputClassName} />
         <div className="md:col-span-2">

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { assertOperatorOrAdmin } from "@/lib/guards";
 import { createCategory, deleteCategory, createUnit, deleteUnit } from "./actions";
 import { AddCategoryForm, AddUnitForm, DeleteDictItemButton } from "./ClientForms";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/Card";
@@ -7,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function DictionariesPage() {
+  await assertOperatorOrAdmin();
   const [categories, units] = await Promise.all([
     prisma.category.findMany({
       orderBy: { name: "asc" },
@@ -26,10 +28,10 @@ export default async function DictionariesPage() {
         description="Базовые справочники для карточек товаров, импорта и отчётных выгрузок."
         actions={
           <Link
-            href="/"
+            href="/admin/dashboard"
             className="inline-flex min-h-9 items-center rounded-md border border-[color:var(--cb-line)] bg-white px-3 py-2 text-sm text-[color:var(--cb-text-soft)] hover:bg-[color:var(--cb-bg-soft)] hover:text-[color:var(--cb-text)]"
           >
-            На главную
+            К обзору
           </Link>
         }
       />

@@ -96,6 +96,9 @@ export default async function MyOrdersPage({ searchParams }) {
                   <div className="text-lg font-semibold text-[color:var(--cb-text)]">{order.procurement.title}</div>
                   <div className="mt-1 text-sm text-[color:var(--cb-text-soft)]">
                     {order.procurement.supplier.name} · {order.procurement.pickupPoint.name}
+                    {order.procurement.pickupPoint.address && (
+                      <span className="text-[color:var(--cb-text-faint)]"> — {order.procurement.pickupPoint.address}</span>
+                    )}
                   </div>
                   <div className="mt-1 text-xs text-[color:var(--cb-text-faint)]">
                     {order.procurement.settlement.name}

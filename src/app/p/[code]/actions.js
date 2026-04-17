@@ -14,6 +14,31 @@ import {
 import { writeOrderAudit } from "@/lib/audit";
 import { redirect } from "next/navigation";
 import { getItemsGoodsTotal } from "@/lib/orders";
+import { logger } from "@/lib/logger";
+import { paymentsApi } from "@/lib/yookassa";
+import { generateUniquePickupCode } from "@/lib/pickupCode";
+
+function buildReceiptForSubmit(session, order) {
+  const items = order.items.map((item) => ({
+    description: item.product.name,
+    quantity: String(item.qty),
+    amount: {
+      value: item.price.toFixed(2),
+      currency: "RUB",
+    },
+    vat_code: 1,
+    payment_subject: "commodity",
+    payment_mode: "full_payment",
+  }));
+
+  return {
+    customer: {
+      email: session.email,
+      ...(order.participantPhone && { phone: order.participantPhone }),
+    },
+    items,
+  };
+}
 
 function orderWhere(procurementId, userId, status) {
   return {
@@ -184,6 +209,7 @@ export async function submitOrder(_prev, fd) {
   const code = str(fd, "code");
   const participantName = str(fd, "participantName");
   const participantPhone = str(fd, "participantPhone");
+  const payMethod = str(fd, "payMethod") || "pickup"; // "online" | "pickup"
 
   const parse = submitOrderSchema.safeParse({ participantName, participantPhone });
   if (!parse.success) {
@@ -191,7 +217,7 @@ export async function submitOrder(_prev, fd) {
   }
 
   const { session, procurement, access } = await getResidentProcurementAccessById(procurementId, {
-    select: { id: true, status: true, deadlineAt: true, settlementId: true, minTotalSum: true },
+    select: { id: true, status: true, deadlineAt: true, settlementId: true, minTotalSum: true, title: true },
   });
   if (!procurement) return { ok: false, message: "Закупка не найдена." };
   if (!canResidentParticipateInProcurement(access)) {
@@ -209,18 +235,66 @@ export async function submitOrder(_prev, fd) {
 
   const goodsTotal = getItemsGoodsTotal(order.items);
 
-  await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      status: "SUBMITTED",
-      participantName,
-      participantPhone: participantPhone || null,
-      goodsTotal,
-    },
-  });
+  // Atomic submit + delivery share recalc — prevents racing submits
+  // from computing shares against stale snapshots. Conditional update
+  // (status: "DRAFT") guards against double-submit; updateMany returns count.
+  let grandTotal;
+  try {
+    grandTotal = await prisma.$transaction(async (tx) => {
+      const fresh = await tx.procurement.findUnique({
+        where: { id: procurementId },
+        select: { status: true, deadlineAt: true },
+      });
+      if (!fresh) throw new Error("PROCUREMENT_NOT_FOUND");
+      if (fresh.status !== "OPEN" || fresh.deadlineAt <= new Date()) {
+        throw new Error("PROCUREMENT_CLOSED");
+      }
 
-  // Recalculate delivery shares for all SUBMITTED orders (including this one)
-  await recalcDeliveryShares(procurementId);
+      const updated = await tx.order.updateMany({
+        where: { id: order.id, status: "DRAFT" },
+        data: {
+          status: "SUBMITTED",
+          participantName,
+          participantPhone: participantPhone || null,
+          goodsTotal,
+        },
+      });
+      if (updated.count === 0) {
+        throw new Error("ALREADY_SUBMITTED");
+      }
+      await recalcDeliveryShares(procurementId, tx);
+
+      // Generate unique 6-digit pickup code
+      const pickupCode = await generateUniquePickupCode(tx);
+      await tx.order.update({
+        where: { id: order.id },
+        data: { pickupCode },
+      });
+
+      // Re-read the order to get computed grandTotal (after delivery share recalc)
+      const submitted = await tx.order.findUnique({
+        where: { id: order.id },
+        select: { grandTotal: true },
+      });
+      return submitted?.grandTotal ?? goodsTotal;
+    });
+  } catch (e) {
+    if (e?.message === "ALREADY_SUBMITTED") {
+      return { ok: false, message: "Заявка уже была оформлена." };
+    }
+    if (e?.message === "PROCUREMENT_CLOSED") {
+      return { ok: false, message: "Закупка закрыта — заявку оформить нельзя." };
+    }
+    if (e?.message === "PROCUREMENT_NOT_FOUND") {
+      return { ok: false, message: "Закупка не найдена." };
+    }
+    throw e;
+  }
+
+  logger.info(
+    { op: "submitOrder", orderId: order.id, procurementId, userId, goodsTotal },
+    "order submitted"
+  );
 
   await writeOrderAudit({
     actorType: "PUBLIC",
@@ -231,7 +305,6 @@ export async function submitOrder(_prev, fd) {
     meta: { participantName, userId, goodsTotal },
   });
 
-  // Notify the resident
   await createNotification({
     userId,
     type: "ORDER_SUBMITTED",
@@ -241,5 +314,73 @@ export async function submitOrder(_prev, fd) {
   });
 
   revalidatePath(`/p/${code}`);
+
+  // Online payment covers goods only — delivery is paid at pickup
+  if (payMethod === "online" && goodsTotal > 0) {
+    const attempt = 1;
+    const idempotenceKey = `order-${order.id}-${attempt}`;
+    const amountValue = goodsTotal.toFixed(2);
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const returnUrl = `${baseUrl}/my/orders/${order.id}?payment=pending`;
+
+    // Fetch full order for receipt (54-ФЗ)
+    const fullOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      select: {
+        deliveryShare: true,
+        participantPhone: true,
+        items: {
+          select: { qty: true, price: true, product: { select: { name: true } } },
+        },
+      },
+    });
+
+    const receipt = buildReceiptForSubmit(session, fullOrder);
+
+    let confirmationUrl;
+    try {
+      const { data: payment } = await paymentsApi.paymentsPost(idempotenceKey, {
+        amount: { value: amountValue, currency: "RUB" },
+        confirmation: { type: "redirect", return_url: returnUrl },
+        capture: true,
+        description: `CoopBuy: ${procurement.title} — заказ ${order.id.slice(-6)}`,
+        metadata: { orderId: order.id },
+        receipt,
+      });
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          yookassaPaymentId: payment.id,
+          paymentStatus: "PENDING",
+          paymentAttempt: attempt,
+        },
+      });
+
+      await writeOrderAudit({
+        actorType: "PUBLIC",
+        actorLabel: session.email ?? "resident",
+        action: "ONLINE_PAYMENT_CREATED",
+        orderId: order.id,
+        procurementId,
+        meta: { yookassaPaymentId: payment.id, attempt, amountValue },
+      });
+
+      logger.info(
+        { op: "submitOrder:createPayment", orderId: order.id, paymentId: payment.id },
+        "payment created on submit",
+      );
+
+      confirmationUrl = payment.confirmation.confirmation_url;
+    } catch (err) {
+      logger.error({ err, op: "submitOrder:createPayment", orderId: order.id }, "payment failed on submit");
+      // Order is submitted successfully — payment just failed to initiate.
+      // User can retry from /my/orders/[orderId].
+      return { ok: true, message: "Заявка принята! Не удалось инициировать оплату — попробуйте из личного кабинета." };
+    }
+
+    redirect(confirmationUrl);
+  }
+
   return { ok: true, message: "Заявка принята!" };
 }

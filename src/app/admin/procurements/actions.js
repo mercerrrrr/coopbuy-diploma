@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { createNotificationsMany } from "@/lib/notifications";
 import { requireOperatorOrAdminResult, assertOperatorOrAdmin } from "@/lib/guards";
 import { writeProcurementAudit } from "@/lib/audit";
+import { notifyProcurementClosed, refundPaidOrdersIfMinNotReached } from "@/lib/procurements/autoCloseExpired";
+import { logger } from "@/lib/logger";
 
 function makeCode() {
   return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
@@ -152,10 +154,14 @@ export async function createProcurement(_prev, fd) {
       }
     );
 
+    logger.info(
+      { op: "createProcurement", procurementId: procurement.id, actor: actorLabel, inviteCode },
+      "procurement created"
+    );
     revalidatePath("/admin/procurements");
     return { ok: true, message: `Закупка создана. Код: ${inviteCode}` };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, op: "createProcurement" }, "procurement create failed");
     return { ok: false, message: "Не удалось создать закупку. Попробуйте ещё раз." };
   }
 }
@@ -193,18 +199,9 @@ export async function closeProcurement(_prev, fd) {
     procurementId: id,
   });
 
-  // Notify users who submitted orders
-  const submittedOrders = await prisma.order.findMany({
-    where: { procurementId: id, status: "SUBMITTED", userId: { not: null } },
-    select: { userId: true },
-  });
-  const userIds = [...new Set(submittedOrders.map((o) => o.userId).filter(Boolean))];
-  await createNotificationsMany(userIds, {
-    type: "PROCUREMENT_CLOSED",
-    title: "Закупка закрыта",
-    body: `Закупка «${procurement.title}» закрыта. Ожидайте информацию о выдаче.`,
-    linkUrl: "/my/orders",
-  });
+  await refundPaidOrdersIfMinNotReached(prisma, id, actorLabel);
+
+  await notifyProcurementClosed(prisma, id, procurement.title);
 
   revalidatePath("/admin/procurements");
   return { ok: true, message: "Закупка закрыта." };

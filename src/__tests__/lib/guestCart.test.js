@@ -98,27 +98,30 @@ describe("mergeGuestDraftOrdersIntoUser()", () => {
       id: "user-item-1",
       productId: "product-1",
       qty: 5,
-      price: 130,
+      price: 120,
     });
     mockTx.orderItem.create.mockResolvedValue({
       id: "user-item-2",
       productId: "product-2",
       qty: 1,
-      price: 70,
+      price: 60,
     });
 
     const result = await mergeGuestDraftOrdersIntoUser("user-1");
 
+    // Existing user-cart item: only qty changes; existing locked price is preserved.
     expect(mockTx.orderItem.update).toHaveBeenCalledWith({
       where: { id: "user-item-1" },
-      data: { qty: 5, price: 130 },
+      data: { qty: 5 },
     });
+    // New item migrated from guest cart: keeps the guest's locked price (60),
+    // not the current live product price.
     expect(mockTx.orderItem.create).toHaveBeenCalledWith({
       data: {
         orderId: "user-order-1",
         productId: "product-2",
         qty: 1,
-        price: 70,
+        price: 60,
       },
     });
     expect(mockTx.orderItem.deleteMany).toHaveBeenCalledWith({

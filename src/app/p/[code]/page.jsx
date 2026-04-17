@@ -81,9 +81,20 @@ export default async function PublicProcurementPage({ params, searchParams }) {
   const cartItems = order?.items ?? [];
   const cartTotal = getItemsGoodsTotal(cartItems);
 
+  // Approximate delivery share for cart preview
+  const submittedCount = await prisma.order.count({
+    where: { procurementId: procurement.id, status: "SUBMITTED" },
+  });
+  const approxDeliveryParticipants = submittedCount + 1;
+  const approxDeliveryShare =
+    procurement.deliveryFee > 0
+      ? Math.ceil(procurement.deliveryFee / approxDeliveryParticipants)
+      : 0;
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const qrDataUrl =
     isSubmitted && order?.id && isResident
-      ? await QRCode.toDataURL(order.id, { margin: 1, width: 200 })
+      ? await QRCode.toDataURL(`${baseUrl}/admin/checkin/${order.id}`, { margin: 1, width: 200 })
       : null;
 
   const bannerConfig = {
@@ -114,7 +125,7 @@ export default async function PublicProcurementPage({ params, searchParams }) {
       <PageHeader
         eyebrow="Закупка"
         title={procurement.title}
-        description={`Поставщик: ${procurement.supplier.name}. Населённый пункт: ${procurement.settlement.name}. Пункт выдачи: ${procurement.pickupPoint.name}.${procurement.settlement.region.name ? ` Регион: ${procurement.settlement.region.name}.` : ""}`}
+        description={`Поставщик: ${procurement.supplier.name}. Населённый пункт: ${procurement.settlement.name}. Пункт выдачи: ${procurement.pickupPoint.name}${procurement.pickupPoint.address ? ` — ${procurement.pickupPoint.address}` : ""}.${procurement.settlement.region.name ? ` Регион: ${procurement.settlement.region.name}.` : ""}`}
         meta={
           <div className="rounded-[0.9rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-left md:text-right">
             <div className="text-xs text-[color:var(--cb-text-soft)]">Приём заявок до</div>
@@ -267,7 +278,7 @@ export default async function PublicProcurementPage({ params, searchParams }) {
               </ul>
 
               {(() => {
-                const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
+                const { goodsTotal, deliveryShare } = getOrderTotals(order);
                 const paymentLabel = PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus;
                 const paymentColor =
                   {
@@ -277,22 +288,22 @@ export default async function PublicProcurementPage({ params, searchParams }) {
                   }[order.paymentStatus] ?? "border-zinc-200 bg-zinc-50 text-zinc-800";
 
                 return (
-                  <div className={`mt-3 space-y-1.5 rounded-[0.8rem] border px-3.5 py-2.5 text-sm ${paymentColor}`}>
-                    {deliveryShare > 0 && (
-                      <div className="flex justify-between text-xs opacity-80">
-                        <span>Товары</span><span>{goodsTotal} ₽</span>
+                  <>
+                    <div className={`mt-3 space-y-1.5 rounded-[0.8rem] border px-3.5 py-2.5 text-sm ${paymentColor}`}>
+                      <div className="flex justify-between font-semibold">
+                        <span>Товары</span><span>{goodsTotal.toLocaleString("ru-RU")} ₽</span>
                       </div>
-                    )}
-                    {deliveryShare > 0 && (
-                      <div className="flex justify-between text-xs opacity-80">
-                        <span>Доставка</span><span>{deliveryShare} ₽</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-semibold">
-                      <span>К оплате</span><span>{grandTotal} ₽</span>
+                      <div className="text-xs opacity-80">{paymentLabel}</div>
                     </div>
-                    <div className="text-xs opacity-80">{paymentLabel}</div>
-                  </div>
+                    {deliveryShare > 0 && (
+                      <div className="mt-2 rounded-[0.8rem] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-800">
+                        <div className="flex justify-between">
+                          <span>≈ Доставка</span><span>~{deliveryShare.toLocaleString("ru-RU")} ₽</span>
+                        </div>
+                        <div className="mt-1 text-xs opacity-70">Оплачивается при получении. Сумма может уменьшиться.</div>
+                      </div>
+                    )}
+                  </>
                 );
               })()}
 
@@ -307,6 +318,12 @@ export default async function PublicProcurementPage({ params, searchParams }) {
                     height={180}
                     className="mx-auto rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] p-2"
                   />
+                  {order.pickupCode && (
+                    <div className="mt-3 rounded-lg border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3 py-2">
+                      <div className="text-xs text-[color:var(--cb-text-faint)]">Код получения</div>
+                      <div className="mt-1 text-center text-xl font-bold tracking-widest text-[color:var(--cb-text)]">{order.pickupCode}</div>
+                    </div>
+                  )}
                   <div className="mt-3 grid gap-2">
                     <Link
                       href={`/my/orders/${order.id}`}
@@ -328,8 +345,14 @@ export default async function PublicProcurementPage({ params, searchParams }) {
             <>
               <div className="text-base font-semibold text-[color:var(--cb-text)]">Текущий заказ</div>
               <div className="mt-1 text-sm text-[color:var(--cb-text-soft)]">
-                Итого: <span className="font-medium text-[color:var(--cb-text)]">{cartTotal} ₽</span>
+                Товары: <span className="font-medium text-[color:var(--cb-text)]">{cartTotal.toLocaleString("ru-RU")} ₽</span>
               </div>
+              {approxDeliveryShare > 0 && (
+                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  ≈ Доставка: ~{approxDeliveryShare.toLocaleString("ru-RU")} ₽
+                  <div className="mt-0.5 opacity-70">Пересчитывается при каждом новом участнике</div>
+                </div>
+              )}
 
               <ul className="mt-3 divide-y divide-[color:var(--cb-line)] rounded-lg border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)]">
                 {cartItems.length === 0 ? (

@@ -51,17 +51,7 @@ export async function mergeGuestDraftOrdersIntoUser(userId) {
     return { migratedOrders: 0, mergedOrders: 0 };
   }
 
-  const productIds = [...new Set(guestOrders.flatMap((order) => order.items.map((item) => item.productId)))];
-
   const result = await prisma.$transaction(async (tx) => {
-    const productPrices = productIds.length
-      ? await tx.product.findMany({
-          where: { id: { in: productIds } },
-          select: { id: true, price: true },
-        })
-      : [];
-
-    const priceMap = new Map(productPrices.map((product) => [product.id, product.price]));
     let migratedOrders = 0;
     let mergedOrders = 0;
 
@@ -99,21 +89,21 @@ export async function mergeGuestDraftOrdersIntoUser(userId) {
         continue;
       }
 
+      // Merge: preserve each item's locked price (set at addToCart time).
+      // For collisions, keep the existing user-cart item's price and just
+      // sum the qty — avoids racing the live product price and avoids
+      // silently rewriting either snapshot.
       const itemsByProductId = new Map(
         userDraft.items.map((item) => [item.productId, item])
       );
 
       for (const guestItem of guestOrder.items) {
-        const currentPrice = priceMap.get(guestItem.productId) ?? guestItem.price;
         const existingItem = itemsByProductId.get(guestItem.productId);
 
         if (existingItem) {
           const updatedItem = await tx.orderItem.update({
             where: { id: existingItem.id },
-            data: {
-              qty: existingItem.qty + guestItem.qty,
-              price: currentPrice,
-            },
+            data: { qty: existingItem.qty + guestItem.qty },
           });
           itemsByProductId.set(guestItem.productId, updatedItem);
           continue;
@@ -124,7 +114,7 @@ export async function mergeGuestDraftOrdersIntoUser(userId) {
             orderId: userDraft.id,
             productId: guestItem.productId,
             qty: guestItem.qty,
-            price: currentPrice,
+            price: guestItem.price,
           },
         });
         itemsByProductId.set(guestItem.productId, createdItem);

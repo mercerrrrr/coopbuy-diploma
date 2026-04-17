@@ -37,6 +37,7 @@ export async function GET(_req, { params }) {
     { header: "Статус оплаты", key: "paymentStatus", width: 18 },
     { header: "Оплачено в", key: "paidAt", width: 22 },
     { header: "Способ оплаты", key: "paymentMethod", width: 18 },
+    { header: "ID платежа ЮKassa", key: "yookassaPaymentId", width: 36 },
   ];
 
   // Bold header row
@@ -53,6 +54,7 @@ export async function GET(_req, { params }) {
       paymentStatus: PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus,
       paidAt: order.paidAt ? new Date(order.paidAt).toLocaleString("ru-RU") : "",
       paymentMethod: order.paymentMethod ?? "",
+      yookassaPaymentId: order.yookassaPaymentId ?? "",
     });
   }
 
@@ -60,7 +62,7 @@ export async function GET(_req, { params }) {
 
   await writeProcurementAudit({
     actorType: "ADMIN",
-    actorLabel: String(session.email ?? "admin"),
+    actorLabel: session.email,
     action: "EXPORT_DOC",
     procurementId: id,
     meta: buildActorAuditMeta(session, {

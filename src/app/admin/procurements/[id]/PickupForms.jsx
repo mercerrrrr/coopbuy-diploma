@@ -63,7 +63,9 @@ export function ManualCheckinForm({ action, procurementId, sessionId }) {
       action={action}
       className="mt-3 flex gap-2"
       onSubmit={() => {
-        if (ref.current) ref.current.value = "";
+        requestAnimationFrame(() => {
+          if (ref.current) ref.current.value = "";
+        });
       }}
     >
       <input type="hidden" name="procurementId" value={procurementId} />
@@ -71,7 +73,7 @@ export function ManualCheckinForm({ action, procurementId, sessionId }) {
       <input
         ref={ref}
         name="orderId"
-        placeholder="ID заказа из QR-кода"
+        placeholder="ID заказа или код получения"
         className={`flex-1 font-mono ${inputClassName}`}
         required
       />

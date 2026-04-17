@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { str, bool, prismaNiceError } from "@/lib/formUtils";
 import { revalidatePath } from "next/cache";
 import { assertAdmin } from "@/lib/guards";
+import { logger } from "@/lib/logger";
 
 export async function createRegion(_prev, formData) {
   await assertAdmin();
@@ -15,7 +16,7 @@ export async function createRegion(_prev, formData) {
     revalidatePath("/admin/locations");
     return { ok: true, message: "Регион добавлен." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/locations" }, "locations action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -30,7 +31,7 @@ export async function deleteRegion(_prev, formData) {
     revalidatePath("/admin/locations");
     return { ok: true, message: "Регион удалён." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/locations" }, "locations action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -47,7 +48,7 @@ export async function createSettlement(_prev, formData) {
     revalidatePath("/admin/locations");
     return { ok: true, message: "Населённый пункт добавлен." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/locations" }, "locations action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -62,7 +63,7 @@ export async function deleteSettlement(_prev, formData) {
     revalidatePath("/admin/locations");
     return { ok: true, message: "Населённый пункт удалён." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/locations" }, "locations action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -85,7 +86,7 @@ export async function createPickupPoint(_prev, formData) {
     revalidatePath("/admin/locations");
     return { ok: true, message: "Пункт выдачи добавлен." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/locations" }, "locations action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }
@@ -100,7 +101,7 @@ export async function deletePickupPoint(_prev, formData) {
     revalidatePath("/admin/locations");
     return { ok: true, message: "Пункт выдачи удалён." };
   } catch (e) {
-    console.error(e);
+    logger.error({ err: e, scope: "admin/locations" }, "locations action failed");
     return { ok: false, message: prismaNiceError(e) };
   }
 }

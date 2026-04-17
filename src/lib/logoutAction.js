@@ -1,6 +1,6 @@
 "use server";
 
-import { clearSessionCookie, getSession } from "@/lib/auth";
+import { clearSessionCookie, getSession, invalidateAllSessions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -9,6 +9,12 @@ export async function logoutAction() {
   const session = await getSession();
 
   if (session) {
+    try {
+      await invalidateAllSessions(String(session.sub));
+    } catch {
+      // never break logout on DB failure — cookie is still cleared
+    }
+
     try {
       const actorType = session.role === "ADMIN" || session.role === "OPERATOR" ? "ADMIN" : "PUBLIC";
       await prisma.auditLog.create({
@@ -27,5 +33,5 @@ export async function logoutAction() {
 
   await clearSessionCookie();
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/auth/login");
 }

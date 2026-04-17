@@ -8,6 +8,7 @@ import {
   HouseLine,
   MapPin,
   Package,
+  QrCode,
   SquaresFour,
   UsersThree,
 } from "@phosphor-icons/react";
@@ -16,6 +17,7 @@ import { getAdminNavItems } from "@/lib/constants";
 const ICON_MAP = {
   SquaresFour,
   Package,
+  QrCode,
   UsersThree,
   Buildings,
   MapPin,
@@ -29,7 +31,7 @@ export function AdminSidebar({ role }) {
   return (
     <aside className="sticky top-0 hidden min-h-[100dvh] w-[16.5rem] shrink-0 self-start border-r border-[color:var(--cb-line)] bg-[color:var(--cb-panel)] lg:flex lg:flex-col">
       <div className="border-b border-[color:var(--cb-line)] px-4 pb-4 pt-5">
-        <Link href="/" className="inline-flex items-center gap-3">
+        <Link href="/admin/dashboard" className="inline-flex items-center gap-3">
           <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--cb-accent-soft)] text-[color:var(--cb-accent)]">
             <HouseLine size={18} weight="fill" />
           </span>
@@ -41,9 +43,6 @@ export function AdminSidebar({ role }) {
           </div>
         </Link>
 
-        <div className="mt-4 rounded-lg border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-sm text-[color:var(--cb-text-soft)]">
-          Доступ отображается по роли. Недоступные рабочие экраны скрыты из меню.
-        </div>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">

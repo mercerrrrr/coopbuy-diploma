@@ -49,12 +49,19 @@ enum AuditAction {
   IMPORT_PRICE_LIST
   IMPORT_PRICE_LIST_DRAFT
   APPLY_PRICE_LIST
+  REVERT_PRICE_LIST
   UPDATE_DELIVERY_SETTINGS
   RECALC_DELIVERY_SHARES
   UPDATE_PAYMENT_STATUS
   LOGIN_SUCCESS
   LOGIN_FAILED
   LOGOUT
+  PROCUREMENT_AUTO_CLOSED
+  FORCE_LOGOUT
+  ONLINE_PAYMENT_CREATED
+  ONLINE_PAYMENT_SUCCEEDED
+  ONLINE_PAYMENT_FAILED
+  ONLINE_PAYMENT_REFUNDED
 }
 
 enum EntityType {
@@ -76,6 +83,7 @@ enum PickupSessionStatus {
 enum ImportBatchStatus {
   DRAFT
   APPLIED
+  REVERTED
 }
 
 enum ImportRowStatus {
@@ -93,6 +101,9 @@ enum PaymentStatus {
   UNPAID
   PAID
   PAY_ON_PICKUP
+  PENDING
+  FAILED
+  REFUNDED
 }
 
 enum NotificationType {
@@ -164,6 +175,7 @@ model Supplier {
   createdAt   DateTime @default(now())
   name        String   @unique
   minOrderSum Int      @default(0)
+  deliveryFee Int      @default(0)
   phone       String?
   email       String?
   isActive    Boolean  @default(true)
@@ -220,23 +232,30 @@ model PriceImportBatch {
   delimiter       String            @default(",")
   status          ImportBatchStatus @default(DRAFT)
   createdByUserId String?
+  appliedAt       DateTime?
+  revertedAt      DateTime?
 
   rows PriceImportRow[]
 }
 
 model PriceImportRow {
-  id           String           @id @default(cuid())
-  batchId      String
-  batch        PriceImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  rowNumber    Int
-  rawName      String
-  rawCategory  String
-  rawUnit      String
-  rawPrice     String
-  rawSku       String?
-  rawImageUrl  String?
-  status       ImportRowStatus  @default(OK)
-  errorMessage String?
+  id               String           @id @default(cuid())
+  batchId          String
+  batch            PriceImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNumber        Int
+  rawName          String
+  rawCategory      String
+  rawUnit          String
+  rawPrice         String
+  rawSku           String?
+  rawImageUrl      String?
+  status           ImportRowStatus  @default(OK)
+  errorMessage     String?
+  appliedProductId String?
+  previousPrice    Int?
+  previousActive   Boolean?
+
+  @@index([batchId, status])
 }
 
 model Procurement {
@@ -269,6 +288,8 @@ model Procurement {
   orders          Order[]
   receivingReport ReceivingReport?
   pickupSession   PickupSession?
+
+  @@index([settlementId, status, deadlineAt])
 }
 
 model Order {
@@ -284,6 +305,7 @@ model Order {
 
   participantName  String?
   participantPhone String?
+  pickupCode       String?  @unique
 
   procurementId String
   procurement   Procurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
@@ -291,9 +313,13 @@ model Order {
   goodsTotal    Int?
   deliveryShare Int?
   grandTotal    Int?
-  paymentStatus PaymentStatus @default(UNPAID)
-  paidAt        DateTime?
-  paymentMethod String?
+  paymentStatus     PaymentStatus @default(UNPAID)
+  paidAt            DateTime?
+  paymentMethod     String?
+  yookassaPaymentId String?
+  paymentAttempt    Int           @default(0)
+  refundedAt        DateTime?
+  refundAmount      Int?
 
   items   OrderItem[]
   checkin PickupCheckin?
@@ -302,6 +328,7 @@ model Order {
   @@index([procurementId, userId])
   @@index([procurementId, status])
   @@index([userId, status])
+  @@index([yookassaPaymentId])
 }
 
 model OrderItem {
@@ -316,6 +343,9 @@ model OrderItem {
 
   qty   Int
   price Int
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model ReceivingReport {
@@ -356,6 +386,7 @@ model User {
   fullName     String
   phone        String?
   role         UserRole @default(RESIDENT)
+  tokenVersion Int      @default(0)
 
   settlementId  String?
   settlement    Settlement?  @relation(fields: [settlementId], references: [id], onDelete: SetNull)
@@ -406,6 +437,7 @@ model AuditLog {
 
   @@index([entityId])
   @@index([action])
+  @@index([createdAt])
 }
 
 model Notification {
@@ -422,4 +454,11 @@ model Notification {
   linkUrl String?
 
   @@index([userId, createdAt])
+}
+
+model RateLimitBucket {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+  updatedAt   DateTime @updatedAt
 }

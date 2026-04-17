@@ -3,16 +3,17 @@ import { getItemsGoodsTotal } from "@/lib/orders";
 
 /**
  * Recomputes goodsTotal / deliveryShare / grandTotal for every SUBMITTED order
- * in a procurement, based on the procurement's current deliveryFee + deliverySplitMode.
+ * in a procurement. Pass an interactive transaction client (`tx`) to make the
+ * recalc atomic with surrounding writes; otherwise it runs in its own transaction.
  */
-export async function recalcDeliveryShares(procurementId) {
-  const procurement = await prisma.procurement.findUnique({
+export async function recalcDeliveryShares(procurementId, client = prisma) {
+  const procurement = await client.procurement.findUnique({
     where: { id: procurementId },
     select: { deliveryFee: true, deliverySplitMode: true },
   });
   if (!procurement) return;
 
-  const orders = await prisma.order.findMany({
+  const orders = await client.order.findMany({
     where: { procurementId, status: "SUBMITTED" },
     include: { items: true },
   });
@@ -29,7 +30,6 @@ export async function recalcDeliveryShares(procurementId) {
   } else if (mode === "PER_ITEM") {
     weights = orders.map((o) => o.items.reduce((s, i) => s + i.qty, 0));
   } else {
-    // PROPORTIONAL_SUM (default)
     weights = goodsTotals;
   }
 
@@ -39,22 +39,46 @@ export async function recalcDeliveryShares(procurementId) {
   if (fee === 0 || totalWeight === 0) {
     shares = orders.map(() => 0);
   } else {
-    shares = weights.map((w) => Math.round((fee * w) / totalWeight));
-    // Correct rounding so sum exactly equals fee
-    const diff = fee - shares.reduce((s, v) => s + v, 0);
-    shares[shares.length - 1] += diff;
+    // Largest-remainder method: floor + distribute leftover by biggest fractional part.
+    // Tie-break by higher index so legacy "give extra to last order" tests stay green.
+    const exact = weights.map((w) => (fee * w) / totalWeight);
+    shares = exact.map((s) => Math.floor(s));
+    let leftover = fee - shares.reduce((s, v) => s + v, 0);
+    if (leftover > 0) {
+      const order = exact
+        .map((s, i) => ({ i, frac: s - Math.floor(s) }))
+        .sort((a, b) => b.frac - a.frac || b.i - a.i);
+      for (let k = 0; k < leftover; k++) {
+        shares[order[k % order.length].i] += 1;
+      }
+    }
   }
 
-  await prisma.$transaction(
-    orders.map((o, i) =>
-      prisma.order.update({
-        where: { id: o.id },
+  // If we have an interactive tx client, run updates sequentially on it.
+  // Otherwise wrap in a fresh $transaction for atomicity.
+  if (client === prisma) {
+    await prisma.$transaction(
+      orders.map((o, i) =>
+        prisma.order.update({
+          where: { id: o.id },
+          data: {
+            goodsTotal: goodsTotals[i],
+            deliveryShare: shares[i],
+            grandTotal: goodsTotals[i] + shares[i],
+          },
+        })
+      )
+    );
+  } else {
+    for (let i = 0; i < orders.length; i++) {
+      await client.order.update({
+        where: { id: orders[i].id },
         data: {
           goodsTotal: goodsTotals[i],
           deliveryShare: shares[i],
           grandTotal: goodsTotals[i] + shares[i],
         },
-      })
-    )
-  );
+      });
+    }
+  }
 }

@@ -4,18 +4,27 @@ export const PAYMENT_LABELS = {
   UNPAID: "Не оплачено",
   PAID: "Оплачено",
   PAY_ON_PICKUP: "Оплата при выдаче",
+  PENDING: "Ожидание оплаты",
+  FAILED: "Оплата не прошла",
+  REFUNDED: "Возвращено",
 };
 
 export const PAYMENT_STATUS_TRANSITIONS = {
   UNPAID: ["PAID", "PAY_ON_PICKUP"],
   PAY_ON_PICKUP: ["PAID", "UNPAID"],
-  PAID: [],
+  PAID: ["REFUNDED"],
+  PENDING: ["PAID", "FAILED", "UNPAID"],
+  FAILED: ["PAID", "PAY_ON_PICKUP", "UNPAID"],
+  REFUNDED: [],
 };
 
 export const PAYMENT_VARIANTS = {
   UNPAID: "danger",
   PAID: "success",
   PAY_ON_PICKUP: "info",
+  PENDING: "warning",
+  FAILED: "danger",
+  REFUNDED: "purple",
 };
 
 export function getAllowedPaymentStatusTransitions(status) {
@@ -74,10 +83,11 @@ export const ROLE_LABELS = {
 export const ADMIN_NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Обзор", icon: "SquaresFour", roles: ["ADMIN", "OPERATOR"] },
   { href: "/admin/procurements", label: "Закупки", icon: "Package", roles: ["ADMIN", "OPERATOR"] },
+  { href: "/admin/checkin", label: "Выдача", icon: "QrCode", roles: ["OPERATOR"] },
   { href: "/admin/users", label: "Пользователи", icon: "UsersThree", roles: ["ADMIN"] },
-  { href: "/admin/suppliers", label: "Поставщики", icon: "Buildings", roles: ["ADMIN"] },
+  { href: "/admin/suppliers", label: "Поставщики", icon: "Buildings", roles: ["ADMIN", "OPERATOR"] },
   { href: "/admin/locations", label: "Территории", icon: "MapPin", roles: ["ADMIN"] },
-  { href: "/admin/dictionaries", label: "Справочники", icon: "BookOpenText", roles: ["ADMIN"] },
+  { href: "/admin/dictionaries", label: "Справочники", icon: "BookOpenText", roles: ["ADMIN", "OPERATOR"] },
 ];
 
 export const MY_NAV_ITEMS = [
@@ -100,6 +110,9 @@ export function getAdminNavItems(role) {
 
 export function canAccessAdminPath(pathname, role) {
   if (!isAdminWorkspaceRole(role)) return false;
+
+  // Admin can access all admin paths
+  if (role === "ADMIN") return true;
 
   return ADMIN_NAV_ITEMS.some((item) => {
     if (!item.roles.includes(role)) return false;

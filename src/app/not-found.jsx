@@ -16,10 +16,10 @@ export default function NotFound() {
         </p>
         <div className="mt-5">
           <Link
-            href="/"
+            href="/auth/login"
             className="inline-flex min-h-10 items-center rounded-md border border-[color:rgba(var(--cb-accent-rgb),0.18)] bg-[color:var(--cb-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[color:var(--cb-accent-strong)]"
           >
-            На главную
+            Вернуться ко входу
           </Link>
         </div>
       </section>

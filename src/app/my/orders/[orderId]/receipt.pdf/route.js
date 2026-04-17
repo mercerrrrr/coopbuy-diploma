@@ -43,8 +43,9 @@ export async function GET(_req, { params }) {
     return new Response("Not found", { status: 404 });
   }
 
-  const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
+  const { goodsTotal, deliveryShare } = getOrderTotals(order);
   const paymentLabel = PAYMENT_LABELS[order.paymentStatus] ?? order.paymentStatus;
+  const procurementClosed = order.procurement.status === "CLOSED";
   const p = order.procurement;
   const isCheckedIn = Boolean(order.checkin);
   const filename = buildOrderDocumentFilename(order.id, "receipt", "pdf");
@@ -148,12 +149,18 @@ export async function GET(_req, { params }) {
   gap(0.7);
 
   // Totals
+  summaryRow("Товары", `${goodsTotal.toLocaleString("ru-RU")} руб.`, 12);
+  summaryRow("Статус оплаты товаров", paymentLabel, 9, GRAY);
   if (deliveryShare > 0) {
-    summaryRow("Товары", `${goodsTotal.toLocaleString("ru-RU")} руб.`, 10);
-    summaryRow("Доставка", `${deliveryShare.toLocaleString("ru-RU")} руб.`, 10);
+    const deliveryLabel = procurementClosed ? "Доставка (при получении)" : "≈ Доставка (при получении)";
+    const deliveryValue = procurementClosed
+      ? `${deliveryShare.toLocaleString("ru-RU")} руб.`
+      : `~${deliveryShare.toLocaleString("ru-RU")} руб.`;
+    summaryRow(deliveryLabel, deliveryValue, 10, GRAY);
   }
-  summaryRow("К оплате", `${grandTotal.toLocaleString("ru-RU")} руб.`, 12);
-  summaryRow("Статус оплаты", paymentLabel, 9, GRAY);
+  if (order.yookassaPaymentId) {
+    summaryRow("ID платежа ЮKassa", order.yookassaPaymentId, 8, GRAY);
+  }
   gap(1.5);
   const ts = `Сформировано: ${new Date().toLocaleString("ru-RU")}`;
   page.drawText(ts, { x: RM - font.widthOfTextAtSize(ts, 7), y, size: 7, font, color: LGRAY });
@@ -162,7 +169,7 @@ export async function GET(_req, { params }) {
 
   await writeOrderAudit({
     actorType: "PUBLIC",
-    actorLabel: String(session.email ?? order.participantName ?? "resident"),
+    actorLabel: session.email,
     action: "EXPORT_DOC",
     orderId: order.id,
     procurementId: order.procurementId,

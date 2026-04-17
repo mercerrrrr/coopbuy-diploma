@@ -80,7 +80,7 @@ export async function GET(_req, { params }) {
 
   await writeProcurementAudit({
     actorType: "ADMIN",
-    actorLabel: String(session?.email ?? "admin"),
+    actorLabel: session.email,
     action: "EXPORT_DOC",
     procurementId: id,
     meta: buildActorAuditMeta(session, {

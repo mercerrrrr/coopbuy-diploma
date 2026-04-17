@@ -67,7 +67,7 @@ describe("register()", () => {
     mockHeaders.mockResolvedValue({
       get: vi.fn().mockReturnValue(null),
     });
-    mockIsLimited.mockReturnValue(false);
+    mockIsLimited.mockResolvedValue(false);
   });
 
   it("возвращает человекочитаемую ошибку при дублирующемся email", async () => {

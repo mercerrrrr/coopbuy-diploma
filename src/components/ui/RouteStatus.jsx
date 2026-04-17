@@ -59,11 +59,11 @@ export function RouteErrorState({
             </Button>
           )}
           <Link
-            href="/"
+            href="/auth/login"
             className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[color:var(--cb-line-strong)] bg-white px-4 py-2 text-sm font-medium text-[color:var(--cb-text)] hover:bg-[color:var(--cb-bg-soft)]"
           >
             <House size={16} weight="fill" />
-            На главную
+            Ко входу
           </Link>
         </div>
       </section>

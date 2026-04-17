@@ -23,7 +23,7 @@ export async function register(_prev, fd) {
   // Rate limit: 5 registrations per IP in 5 min
   const hdrs = await headers();
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
-  if (isLimited(`register:${ip}:${rawEmail}`)) {
+  if (await isLimited(`register:${ip}:${rawEmail}`)) {
     return { error: "Слишком много попыток. Попробуйте через 5 минут." };
   }
 
@@ -35,6 +35,14 @@ export async function register(_prev, fd) {
   // Check email not taken
   const existing = await prisma.user.findUnique({ where: { email: rawEmail } });
   if (existing) return { error: "Этот email уже зарегистрирован." };
+
+  // Validate settlementId actually exists — FK would catch it later, but a
+  // friendly error beats a Prisma exception in the UI.
+  const settlement = await prisma.settlement.findUnique({
+    where: { id: settlementId },
+    select: { id: true },
+  });
+  if (!settlement) return { error: "Выбранный населённый пункт не найден." };
 
   const passwordHash = await hash(password, 10);
 
@@ -58,6 +66,7 @@ export async function register(_prev, fd) {
     fullName: user.fullName,
     settlementId: user.settlementId ?? undefined,
     pickupPointId: undefined,
+    tv: user.tokenVersion,
   });
 
   revalidatePath("/", "layout");

@@ -6,7 +6,35 @@
       "Bash(npx prisma generate)",
       "Bash(npm run test:run)",
       "Bash(npm run build)",
-      "Bash(wc -l /d/VsCodeProjects/coopbuy-diploma/src/**/*.js /d/VsCodeProjects/coopbuy-diploma/src/**/*.jsx)"
-    ]
+      "Bash(wc -l /d/VsCodeProjects/coopbuy-diploma/src/**/*.js /d/VsCodeProjects/coopbuy-diploma/src/**/*.jsx)",
+      "Bash(npx vitest:*)",
+      "Bash(npx next:*)",
+      "Bash(grep -rn \"price\" /d/VsCodeProjects/coopbuy-diploma/src/lib/*.js)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -rn \"goodsTotal\\\\|deliveryShare\\\\|grandTotal\" /d/VsCodeProjects/coopbuy-diploma/src/lib/*.js)",
+      "Bash(grep -n \"SELECT.*FOR UPDATE\\\\|LOCK\\\\|isolationLevel\\\\|transaction\" /d/VsCodeProjects/coopbuy-diploma/src/app/p/[code]/actions.js)",
+      "Bash(grep -A 5 \"deadlineAt\\\\|procurement.status.*OPEN\" /d/VsCodeProjects/coopbuy-diploma/src/lib/procurements/*.js)",
+      "Bash(grep -B 5 -A 10 \"canResidentParticipateInProcurement\" /d/VsCodeProjects/coopbuy-diploma/src/app/p/[code]/actions.js)",
+      "Bash(grep -rn 'serializable\\\\|SERIALIZABLE\\\\|isolation\\\\|level\\\\|$transaction' /d/VsCodeProjects/coopbuy-diploma/src '--include=*.js')",
+      "Bash(grep -B 5 -A 20 \"export async function submitOrder\" /d/VsCodeProjects/coopbuy-diploma/src/app/p/[code]/actions.js)",
+      "Bash(find \"d:/VsCodeProjects/coopbuy-diploma/src/__tests__\" -name \"*.test.js\" -exec basename {} \\\\;)",
+      "Bash(wc -l \"d:/VsCodeProjects/coopbuy-diploma/src/__tests__/lib/\"*.test.js)",
+      "Bash(npm test:*)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/admin/dashboard)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/admin/users)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/admin/procurements)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/admin/locations)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/admin/checkin)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -b cb_session=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjbW0wZDc0M24wMDAydW93NG9lNnhjaHRnIiwicm9sZSI6IkFETUlOIiwiZW1haWwiOiJhZG1pbkBsb2NhbC50ZXN0IiwiZnVsbE5hbWUiOiLQkNC00LzQuNC90LjRgdGC0YDQsNGC0L7RgCIsInR2IjozLCJpYXQiOjE3NzY0NDcwNDEsImV4cCI6MTc3NzA1MTg0MX0.BBm8L9vDp7WrIhLdj1QRLwjRxDEVkgizHn8-OBWvVY4 http://localhost:3000/admin/__TRACKED_VAR__)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -b cb_session=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjbW0zbTB4MGQwMDAxbDR3NHNmbTRhY25kIiwicm9sZSI6Ik9QRVJBVE9SIiwiZW1haWwiOiJvcGVyYXRvcjFAbG9jYWwudGVzdCIsImZ1bGxOYW1lIjoi0J7Qv9C10YDQsNGC0L7RgCDQntC00LjQvSIsInBpY2t1cFBvaW50SWQiOiJjbWtjMjFsbTEwMDA2dHN3NDZzeHA3ZmUwIiwidHYiOjQsImlhdCI6MTc3NjQ0NzA0MSwiZXhwIjoxNzc3MDUxODQxfQ.UIUuqBfyjRLlj-bQI708H026K9y5bkeZA87LxUHmTBU http://localhost:3000/admin/__TRACKED_VAR__)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -b cb_session=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjbW0wZDc0M24wMDAydW93NG9lNnhjaHRnIiwicm9sZSI6IkFETUlOIiwiZW1haWwiOiJhZG1pbkBsb2NhbC50ZXN0IiwiZnVsbE5hbWUiOiLQkNC00LzQuNC90LjRgdGC0YDQsNGC0L7RgCIsInR2IjozLCJpYXQiOjE3NzY0NDcwNDEsImV4cCI6MTc3NzA1MTg0MX0.BBm8L9vDp7WrIhLdj1QRLwjRxDEVkgizHn8-OBWvVY4 http://localhost:3000/admin/procurements/cmnwdzf0h0019ygw498i0j7kj__TRACKED_VAR__)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -b cb_session=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjbW0zbTB4MGQwMDAxbDR3NHNmbTRhY25kIiwicm9sZSI6Ik9QRVJBVE9SIiwiZW1haWwiOiJvcGVyYXRvcjFAbG9jYWwudGVzdCIsImZ1bGxOYW1lIjoi0J7Qv9C10YDQsNGC0L7RgCDQntC00LjQvSIsInBpY2t1cFBvaW50SWQiOiJjbWtjMjFsbTEwMDA2dHN3NDZzeHA3ZmUwIiwidHYiOjQsImlhdCI6MTc3NjQ0NzA0MSwiZXhwIjoxNzc3MDUxODQxfQ.UIUuqBfyjRLlj-bQI708H026K9y5bkeZA87LxUHmTBU http://localhost:3000/admin/procurements/cmnwdzf0h0019ygw498i0j7kj__TRACKED_VAR__)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)"
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Badge } from "@/components/ui/Badge";
@@ -17,6 +17,12 @@ const PAYMENT_ACTION_STYLES = {
     "rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-800 hover:bg-sky-100 transition-colors",
   UNPAID:
     "rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-50 transition-colors",
+  PENDING:
+    "rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800 hover:bg-amber-100 transition-colors",
+  FAILED:
+    "rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 hover:bg-rose-100 transition-colors",
+  REFUNDED:
+    "rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 transition-colors",
 };
 
 function PaymentTransitionButton({ status }) {
@@ -60,8 +66,85 @@ function PaymentStatusForm({ orderId, procurementId, currentStatus, action }) {
   );
 }
 
-export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus }) {
+// ── Refund modal ──────────────────────────────────────────────────────────────
+
+function RefundModal({ order, action, onClose }) {
+  const [state, formAction] = useActionState(action, null);
+  const grandTotal = order.grandTotal ?? 0;
+  const defaultAmount = grandTotal;
+
+  if (state?.ok) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+        <div className="w-full max-w-sm rounded-xl border border-emerald-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <p className="text-sm text-emerald-800">{state.message}</p>
+          <button onClick={onClose} className="mt-3 rounded-md border border-zinc-200 px-3 py-1.5 text-xs hover:bg-zinc-50">
+            Закрыть
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-base font-semibold text-zinc-900">Возврат средств</div>
+        <p className="mt-1 text-sm text-zinc-500">
+          Участник: {order.participantName ?? "—"}. Сумма заказа: {(grandTotal / 100).toFixed(2)} ₽
+        </p>
+
+        <form action={formAction} className="mt-4 space-y-3">
+          <input type="hidden" name="orderId" value={order.id} />
+          <div>
+            <label htmlFor="refund-amount" className="block text-sm font-medium text-zinc-700">
+              Сумма возврата (копейки)
+            </label>
+            <input
+              id="refund-amount"
+              name="refundAmount"
+              type="number"
+              min="1"
+              max={grandTotal}
+              defaultValue={defaultAmount}
+              required
+              className="mt-1 h-9 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-indigo-400"
+            />
+            <p className="mt-1 text-xs text-zinc-400">
+              Макс: {grandTotal} коп. ({(grandTotal / 100).toFixed(2)} ₽)
+            </p>
+          </div>
+          {state?.error && (
+            <p className="text-xs text-red-600">{state.error}</p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs hover:bg-zinc-50">
+              Отмена
+            </button>
+            <RefundSubmitButton />
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function RefundSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-md border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-800 hover:bg-violet-100 disabled:opacity-50"
+    >
+      {pending ? "Обработка..." : "Подтвердить возврат"}
+    </button>
+  );
+}
+
+export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus, refundPayment }) {
   const [query, setQuery] = useState("");
+  const [refundOrder, setRefundOrder] = useState(null);
 
   const q = query.toLowerCase().trim();
   const filtered = q
@@ -135,12 +218,23 @@ export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus }
                       </Badge>
                     </td>
                     <td className="px-3 py-2.5">
-                      <PaymentStatusForm
-                        orderId={order.id}
-                        procurementId={procurementId}
-                        currentStatus={order.paymentStatus}
-                        action={updatePaymentStatus}
-                      />
+                      <div className="flex items-center gap-2">
+                        <PaymentStatusForm
+                          orderId={order.id}
+                          procurementId={procurementId}
+                          currentStatus={order.paymentStatus}
+                          action={updatePaymentStatus}
+                        />
+                        {refundPayment && order.paymentStatus === "PAID" && order.yookassaPaymentId && (
+                          <button
+                            type="button"
+                            onClick={() => setRefundOrder(order)}
+                            className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 transition-colors"
+                          >
+                            Возврат
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -153,6 +247,14 @@ export function OrdersSearchTable({ orders, procurementId, updatePaymentStatus }
         <p className="text-xs text-zinc-400">
           Показано {filtered.length} из {orders.length}
         </p>
+      )}
+
+      {refundOrder && refundPayment && (
+        <RefundModal
+          order={refundOrder}
+          action={refundPayment}
+          onClose={() => setRefundOrder(null)}
+        />
       )}
     </div>
   );

@@ -17,17 +17,17 @@ export function assertOrderBelongsToProcurement(order, procurementId) {
 /**
  * Asserts that an order can be checked in:
  *   - status must be SUBMITTED
- *   - paymentStatus must not be UNPAID
- * Throws descriptive Error on violation.
+ *   - paymentStatus must not be REFUNDED
+ * Delivery is paid separately at pickup, so UNPAID is allowed.
  */
 export function assertOrderCanCheckin(order) {
   if (!order) throw new Error("Заявка не найдена.");
   if (order.status !== "SUBMITTED") {
     throw new Error("Выдать можно только подтверждённую заявку.");
   }
-  if (order.paymentStatus === "UNPAID") {
+  if (order.paymentStatus === "REFUNDED") {
     throw new Error(
-      "Заявка не оплачена. Выдача возможна только при статусе PAID или PAY_ON_PICKUP."
+      "Заявка с возвратом средств. Выдача невозможна."
     );
   }
 }

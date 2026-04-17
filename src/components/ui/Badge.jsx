@@ -6,6 +6,7 @@ const VARIANTS = {
   info: "border border-sky-200 bg-sky-50 text-sky-800",
   primary:
     "border border-[color:rgba(var(--cb-accent-rgb),0.16)] bg-[color:var(--cb-accent-soft)] text-[color:var(--cb-accent-strong)]",
+  purple: "border border-violet-200 bg-violet-50 text-violet-800",
 };
 
 export function Badge({ variant = "neutral", className = "", children }) {

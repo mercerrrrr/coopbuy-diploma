@@ -47,7 +47,7 @@ export default async function MyProcurementsPage() {
       <PageHeader
         eyebrow="Доступные закупки"
         title="Закупки по вашему населённому пункту"
-        description="Показаны открытые закупки для населённого пункта, привязанного к вашей учётной записи. В пилотном сценарии это основной пользовательский фильтр."
+        description="Показаны открытые закупки для населённого пункта, привязанного к вашей учётной записи."
         meta={
           settlementId ? (
             <div className="rounded-[0.9rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3 text-left md:text-right">
@@ -74,18 +74,7 @@ export default async function MyProcurementsPage() {
         </InlineMessage>
       )}
 
-      {settlement && (
-        <InlineMessage type="neutral">
-          Основной фильтр пилотного сценария: населённый пункт{" "}
-          <span className="font-medium text-[color:var(--cb-text)]">{settlement.name}</span>.
-          {settlement.region?.name && (
-            <span>
-              {" "}
-              Регион остаётся в модели и используется для масштабирования: {settlement.region.name}.
-            </span>
-          )}
-        </InlineMessage>
-      )}
+
 
       {procurements.length === 0 && settlementId && (
         <div className="cb-panel-strong rounded-[1.1rem]">
@@ -121,6 +110,9 @@ export default async function MyProcurementsPage() {
                   </div>
                   <div className="mt-1 text-sm text-[color:var(--cb-text-soft)]">
                     {procurement.supplier.name} · {procurement.pickupPoint.name}
+                    {procurement.pickupPoint.address && (
+                      <span className="text-[color:var(--cb-text-faint)]"> — {procurement.pickupPoint.address}</span>
+                    )}
                   </div>
                   <div className="mt-1 text-xs text-[color:var(--cb-text-faint)]">
                     Населённый пункт: {procurement.settlement.name}
@@ -174,6 +166,7 @@ export default async function MyProcurementsPage() {
                 </span>
                 <span className="rounded-md border border-[color:var(--cb-line)] bg-white px-2.5 py-1">
                   Пункт выдачи: {procurement.pickupPoint.name}
+                  {procurement.pickupPoint.address && ` — ${procurement.pickupPoint.address}`}
                 </span>
               </div>
 

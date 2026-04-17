@@ -10,9 +10,14 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PAYMENT_LABELS, PAYMENT_VARIANTS } from "@/lib/constants";
 import { getOrderTotals } from "@/lib/orders";
 import { PrintPageButton } from "./PrintPageButton";
+import { PaymentButton } from "./PaymentButton";
+import { PaymentPendingPoller } from "./PaymentPendingPoller";
+import { createPayment } from "./actions";
 
-export default async function OrderDetailPage({ params }) {
+export default async function OrderDetailPage({ params, searchParams }) {
   const { orderId } = await params;
+  const sp = await searchParams;
+  const paymentPending = sp?.payment === "pending";
 
   const session = await getSession();
   if (!session) redirect(`/auth/login?next=/my/orders/${orderId}`);
@@ -38,9 +43,14 @@ export default async function OrderDetailPage({ params }) {
     notFound();
   }
 
-  const { goodsTotal, deliveryShare, grandTotal } = getOrderTotals(order);
+  const { goodsTotal, deliveryShare } = getOrderTotals(order);
+  const procurementClosed = order.procurement.status === "CLOSED";
   const isCheckedIn = Boolean(order.checkin);
-  const qrDataUrl = await QRCode.toDataURL(order.id, { margin: 1, width: 220 });
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const qrDataUrl = await QRCode.toDataURL(
+    `${baseUrl}/admin/checkin/${order.id}`,
+    { margin: 1, width: 220 }
+  );
 
   return (
     <main className="cb-shell space-y-4 py-1">
@@ -55,7 +65,7 @@ export default async function OrderDetailPage({ params }) {
       <PageHeader
         eyebrow="Личный кабинет / карточка заказа"
         title={order.procurement.title}
-        description={`Поставщик ${order.procurement.supplier.name}. Пункт выдачи ${order.procurement.pickupPoint.name}. Эта страница выступает основной квитанцией заказа: здесь собраны состав, сумма, статус оплаты и QR-код.`}
+        description={`Поставщик ${order.procurement.supplier.name}. Пункт выдачи ${order.procurement.pickupPoint.name}${order.procurement.pickupPoint.address ? ` — ${order.procurement.pickupPoint.address}` : ""}. Эта страница выступает основной квитанцией заказа: здесь собраны состав, сумма, статус оплаты и QR-код.`}
         meta={
           <div className="rounded-xl border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-3.5 py-3">
             <div className="cb-kicker">Статус выдачи</div>
@@ -70,6 +80,10 @@ export default async function OrderDetailPage({ params }) {
         Основная квитанция доступна прямо на этой странице. Для бумажной версии используйте печать браузера или сохранение в PDF.
       </InlineMessage>
 
+      {(paymentPending || order.paymentStatus === "PENDING") && (
+        <PaymentPendingPoller orderId={order.id} initialStatus={order.paymentStatus} />
+      )}
+
       <div className="grid gap-4 xl:grid-cols-[1.4fr_0.82fr]">
         <div className="cb-panel-strong rounded-[1.25rem] p-4 md:p-5">
           <div className="flex items-start justify-between gap-3">
@@ -79,6 +93,9 @@ export default async function OrderDetailPage({ params }) {
               </div>
               <div className="mt-1.5 text-sm text-[color:var(--cb-text-soft)]">
                 {order.procurement.supplier.name} · {order.procurement.pickupPoint.name}
+                {order.procurement.pickupPoint.address && (
+                  <span className="text-[color:var(--cb-text-faint)]"> — {order.procurement.pickupPoint.address}</span>
+                )}
               </div>
               <div className="mt-1 text-xs text-[color:var(--cb-text-faint)]">
                 {order.procurement.settlement.name}
@@ -101,9 +118,9 @@ export default async function OrderDetailPage({ params }) {
               )}
             </div>
             <div className="rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--cb-text-faint)]">К оплате</div>
+              <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--cb-text-faint)]">Товары</div>
               <div className="mt-2 text-xl font-semibold text-[color:var(--cb-text)]">
-                {grandTotal.toLocaleString("ru-RU")} ₽
+                {goodsTotal.toLocaleString("ru-RU")} ₽
               </div>
             </div>
             <div className="rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-4 py-3">
@@ -153,25 +170,32 @@ export default async function OrderDetailPage({ params }) {
           </div>
 
           <div className="mt-4 rounded-[1.1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-4 py-4 space-y-2">
-            {deliveryShare > 0 && (
-              <>
-                <div className="flex justify-between text-sm text-[color:var(--cb-text-soft)]">
-                  <span>Товары</span>
-                  <span>{goodsTotal.toLocaleString("ru-RU")} ₽</span>
-                </div>
-                <div className="flex justify-between text-sm text-[color:var(--cb-text-soft)]">
-                  <span>Доставка</span>
-                  <span>{deliveryShare.toLocaleString("ru-RU")} ₽</span>
-                </div>
-              </>
-            )}
             <div className="flex justify-between text-base font-semibold text-[color:var(--cb-text)]">
-              <span>К оплате</span>
-              <span>{grandTotal.toLocaleString("ru-RU")} ₽</span>
+              <span>Товары</span>
+              <span>{goodsTotal.toLocaleString("ru-RU")} ₽</span>
             </div>
+            {deliveryShare > 0 && (
+              <div className="flex justify-between text-sm text-amber-700">
+                <span>{procurementClosed ? "Доставка (при получении)" : "≈ Доставка (при получении)"}</span>
+                <span>{procurementClosed ? "" : "~"}{deliveryShare.toLocaleString("ru-RU")} ₽</span>
+              </div>
+            )}
+            {deliveryShare > 0 && !procurementClosed && (
+              <div className="text-xs text-amber-600/70">Сумма доставки может уменьшиться. Финальная сумма — после закрытия закупки.</div>
+            )}
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 space-y-3">
+            {(order.paymentStatus === "UNPAID" || order.paymentStatus === "FAILED") && (
+              <PaymentButton
+                orderId={order.id}
+                action={createPayment}
+                label={order.paymentStatus === "FAILED" ? "Попробовать снова" : "Оплатить онлайн"}
+              />
+            )}
+            {order.paymentStatus === "PENDING" && (
+              <PaymentButton orderId={order.id} action={createPayment} label="Повторить оплату" />
+            )}
             <div className="grid gap-2 sm:grid-cols-2">
               <PrintPageButton />
               <Link
@@ -205,7 +229,14 @@ export default async function OrderDetailPage({ params }) {
             />
           </div>
 
-          <div className="mt-4 rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-4 py-3 text-left">
+          {order.pickupCode && (
+            <div className="mt-4 rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--cb-text-faint)]">Код получения</div>
+              <p className="mt-2 text-center text-2xl font-bold tracking-widest text-[color:var(--cb-text)]">{order.pickupCode}</p>
+            </div>
+          )}
+
+          <div className="mt-3 rounded-[1rem] border border-[color:var(--cb-line)] bg-[color:var(--cb-bg-soft)] px-4 py-3 text-left">
             <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--cb-text-faint)]">ID заказа</div>
             <p className="mt-2 break-all font-mono text-sm text-[color:var(--cb-text-soft)]">{order.id}</p>
           </div>

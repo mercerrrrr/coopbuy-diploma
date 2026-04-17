@@ -1,0 +1,127 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="CoopBuy ERD" id="coopbuy">
+    <mxGraphModel dx="2054" dy="1103" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Region" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="&lt;b&gt;Region&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;name (UK)&lt;br/&gt;createdAt" vertex="1">
+          <mxGeometry height="110" width="220" x="40" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="Settlement" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="&lt;b&gt;Settlement&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;name&lt;br/&gt;🔗 regionId&lt;br/&gt;createdAt" vertex="1">
+          <mxGeometry height="130" width="220" x="330" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="PickupPoint" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="&lt;b&gt;PickupPoint&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;name&lt;br/&gt;address&lt;br/&gt;hasFreezer&lt;br/&gt;🔗 settlementId" vertex="1">
+          <mxGeometry height="150" width="220" x="600" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="Users" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="&lt;b&gt;Users&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;email (UK)&lt;br/&gt;passwordHash&lt;br/&gt;fullName&lt;br/&gt;phone&lt;br/&gt;role&lt;br/&gt;🔗 settlementId&lt;br/&gt;🔗 pickupPointId" vertex="1">
+          <mxGeometry height="210" width="220" x="880" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="Category" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;Category&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;name (UK)" vertex="1">
+          <mxGeometry height="90" width="220" x="40" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="Unit" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;Unit&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;name (UK)" vertex="1">
+          <mxGeometry height="90" width="220" x="40" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="Supplier" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;Supplier&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;name (UK)&lt;br/&gt;minOrderSum&lt;br/&gt;phone&lt;br/&gt;email&lt;br/&gt;isActive" vertex="1">
+          <mxGeometry height="170" width="220" x="320" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="SupplierDeliveryZone" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;SupplierDeliveryZone&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;🔗 supplierId&lt;br/&gt;🔗 settlementId&lt;br/&gt;isActive" vertex="1">
+          <mxGeometry height="130" width="220" x="320" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="Product" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="&lt;b&gt;Product&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;name&lt;br/&gt;price&lt;br/&gt;sku&lt;br/&gt;imageUrl&lt;br/&gt;isActive&lt;br/&gt;🔗 supplierId&lt;br/&gt;🔗 categoryId&lt;br/&gt;🔗 unitId" vertex="1">
+          <mxGeometry height="230" width="220" x="40" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="Procurement" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=0" value="&lt;b&gt;Procurement&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;status&lt;br/&gt;title&lt;br/&gt;inviteCode (UK)&lt;br/&gt;deadlineAt&lt;br/&gt;minTotalSum&lt;br/&gt;pickupWindowStart&lt;br/&gt;pickupWindowEnd&lt;br/&gt;deliveryFee&lt;br/&gt;deliverySplitMode&lt;br/&gt;🔗 supplierId&lt;br/&gt;🔗 settlementId&lt;br/&gt;🔗 pickupPointId" vertex="1">
+          <mxGeometry height="290" width="220" x="600" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="Orders" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" value="&lt;b&gt;Orders&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;status&lt;br/&gt;guestId&lt;br/&gt;🔗 userId&lt;br/&gt;participantName&lt;br/&gt;participantPhone&lt;br/&gt;🔗 procurementId&lt;br/&gt;goodsTotal&lt;br/&gt;deliveryShare&lt;br/&gt;grandTotal&lt;br/&gt;paymentStatus&lt;br/&gt;paidAt&lt;br/&gt;paymentMethod" vertex="1">
+          <mxGeometry height="290" width="220" x="880" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderItem" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" value="&lt;b&gt;OrderItem&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;🔗 orderId&lt;br/&gt;🔗 productId&lt;br/&gt;qty&lt;br/&gt;price" vertex="1">
+          <mxGeometry height="140" width="220" x="880" y="660" as="geometry" />
+        </mxCell>
+        <mxCell id="ReceivingReport" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" value="&lt;b&gt;ReceivingReport&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;status&lt;br/&gt;notes&lt;br/&gt;🔗 procurementId (UK)" vertex="1">
+          <mxGeometry height="130" width="220" x="1160" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ReceivingLine" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" value="&lt;b&gt;ReceivingLine&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;🔗 reportId&lt;br/&gt;🔗 productId&lt;br/&gt;expectedQty&lt;br/&gt;receivedQty&lt;br/&gt;comment" vertex="1">
+          <mxGeometry height="170" width="220" x="1160" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="PickupSession" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" value="&lt;b&gt;PickupSession&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;status&lt;br/&gt;startAt&lt;br/&gt;endAt&lt;br/&gt;🔗 procurementId (UK)" vertex="1">
+          <mxGeometry height="150" width="220" x="1160" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="PickupCheckin" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" value="&lt;b&gt;PickupCheckin&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 id&lt;br/&gt;checkedAt&lt;br/&gt;note&lt;br/&gt;🔗 sessionId&lt;br/&gt;🔗 orderId (UK)&lt;br/&gt;operatorUserId" vertex="1">
+          <mxGeometry height="170" width="220" x="1160" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="e_settlement_region" edge="1" parent="1" source="Settlement" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;endArrow=ERone;startArrow=ERmany;" target="Region">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pickuppoint_settlement" edge="1" parent="1" source="PickupPoint" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;endArrow=ERone;startArrow=ERmany;" target="Settlement">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_settlement" edge="1" parent="1" source="Users" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Settlement">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_users_pickuppoint" edge="1" parent="1" source="Users" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="PickupPoint">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sdz_supplier" edge="1" parent="1" source="SupplierDeliveryZone" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Supplier">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sdz_settlement" edge="1" parent="1" source="SupplierDeliveryZone" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Settlement">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_product_supplier" edge="1" parent="1" source="Product" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Supplier">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_product_category" edge="1" parent="1" source="Product" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Category">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_product_unit" edge="1" parent="1" source="Product" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Unit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_procurement_supplier" edge="1" parent="1" source="Procurement" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Supplier">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_procurement_settlement" edge="1" parent="1" source="Procurement" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Settlement">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_procurement_pickuppoint" edge="1" parent="1" source="Procurement" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="PickupPoint">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_orders_users" edge="1" parent="1" source="Orders" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Users">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_orders_procurement" edge="1" parent="1" source="Orders" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Procurement">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_orderitem_orders" edge="1" parent="1" source="OrderItem" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Orders">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_orderitem_product" edge="1" parent="1" source="OrderItem" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_receivingreport_procurement" edge="1" parent="1" source="ReceivingReport" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERone;strokeColor=#9673a6;" target="Procurement">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_receivingline_report" edge="1" parent="1" source="ReceivingLine" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="ReceivingReport">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_receivingline_product" edge="1" parent="1" source="ReceivingLine" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="Product">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pickupsession_procurement" edge="1" parent="1" source="PickupSession" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERone;strokeColor=#9673a6;" target="Procurement">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pickupcheckin_session" edge="1" parent="1" source="PickupCheckin" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERmany;" target="PickupSession">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pickupcheckin_orders" edge="1" parent="1" source="PickupCheckin" style="edgeStyle=entityRelationEdgeStyle;rounded=0;html=1;endArrow=ERone;startArrow=ERone;strokeColor=#9673a6;" target="Orders">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;spacingRight=10;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="&lt;b&gt;Легенда&lt;/b&gt;&lt;hr size=&quot;1&quot;/&gt;🔑 — Primary Key (PK)&lt;br/&gt;🔗 — Foreign Key (FK)&lt;br/&gt;(UK) — Unique Key&lt;br/&gt;&lt;br/&gt;&lt;b&gt;Цвета кластеров:&lt;/b&gt;&lt;br/&gt;🟦 География&lt;br/&gt;🟩 Пользователи&lt;br/&gt;🟨 Каталог&lt;br/&gt;🟥 Сделка (Procurement/Orders)&lt;br/&gt;🟪 Приёмка и выдача&lt;br/&gt;&lt;br/&gt;&lt;b&gt;Связи:&lt;/b&gt;&lt;br/&gt;чёрная — 1:N&lt;br/&gt;фиолетовая — 1:1" vertex="1">
+          <mxGeometry height="280" width="240" x="740" y="930" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

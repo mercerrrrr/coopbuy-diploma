@@ -14,7 +14,9 @@ const {
   mockGetResidentProcurementAccessById: vi.fn(),
   mockPrisma: {
     product: { findUnique: vi.fn() },
-    order: { findFirst: vi.fn(), update: vi.fn() },
+    order: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    procurement: { findUnique: vi.fn() },
+    $transaction: vi.fn(),
   },
   mockRecalcDeliveryShares: vi.fn(),
   mockRedirect: vi.fn((url) => {
@@ -50,6 +52,22 @@ vi.mock("next/cache", () => ({
 
 vi.mock("next/navigation", () => ({
   redirect: mockRedirect,
+}));
+
+vi.mock("@/lib/audit", () => ({
+  writeOrderAudit: vi.fn(),
+}));
+
+vi.mock("@/lib/yookassa", () => ({
+  paymentsApi: { paymentsPost: vi.fn() },
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("@/lib/orders", () => ({
+  getItemsGoodsTotal: vi.fn(() => 1000),
 }));
 
 import { addToCart, submitOrder } from "./actions";
@@ -191,5 +209,109 @@ describe("/p/[code] actions access guards", () => {
       ok: false,
       message: "Эта закупка доступна только жителям соответствующего населённого пункта.",
     });
+  });
+});
+
+describe("submitOrder race on deadline/status", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetResidentProcurementAccessById.mockResolvedValue({
+      session: { sub: "user-1", email: "u@local" },
+      procurement: { id: "proc-1", status: "OPEN", deadlineAt: new Date(Date.now() + 3_600_000) },
+      access: { status: "allowed" },
+    });
+    mockPrisma.order.findFirst.mockResolvedValue({
+      id: "order-1",
+      items: [{ qty: 1, price: 100 }],
+    });
+    // Replay the transaction callback against a tx shim so our production
+    // code's inner re-read runs through the test doubles.
+    mockPrisma.$transaction.mockImplementation(async (cb) => {
+      const tx = {
+        procurement: { findUnique: mockPrisma.procurement.findUnique },
+        order: {
+          updateMany: mockPrisma.order.updateMany,
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi.fn().mockImplementation(({ where }) => {
+            // pickupCode uniqueness check → not found (code is available)
+            if (where.pickupCode) return Promise.resolve(null);
+            // grandTotal re-read after recalc
+            return Promise.resolve({ grandTotal: 1000 });
+          }),
+        },
+      };
+      return cb(tx);
+    });
+  });
+
+  it("rejects submit when procurement was closed between read and transaction", async () => {
+    mockPrisma.procurement.findUnique.mockResolvedValue({
+      status: "CLOSED",
+      deadlineAt: new Date(Date.now() + 3_600_000),
+    });
+
+    const result = await submitOrder(
+      null,
+      formData({
+        procurementId: "proc-1",
+        code: "ABC123",
+        participantName: "Иван Иванов",
+        participantPhone: "+79001234567",
+      })
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Закупка закрыта — заявку оформить нельзя.",
+    });
+    expect(mockPrisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects submit when deadline expired between read and transaction", async () => {
+    mockPrisma.procurement.findUnique.mockResolvedValue({
+      status: "OPEN",
+      deadlineAt: new Date(Date.now() - 1000),
+    });
+
+    const result = await submitOrder(
+      null,
+      formData({
+        procurementId: "proc-1",
+        code: "ABC123",
+        participantName: "Иван Иванов",
+        participantPhone: "+79001234567",
+      })
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Закупка закрыта — заявку оформить нельзя.",
+    });
+    expect(mockPrisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("allows submit when procurement is still OPEN and in-window", async () => {
+    mockPrisma.procurement.findUnique.mockResolvedValue({
+      status: "OPEN",
+      deadlineAt: new Date(Date.now() + 3_600_000),
+    });
+    mockPrisma.order.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await submitOrder(
+      null,
+      formData({
+        procurementId: "proc-1",
+        code: "ABC123",
+        participantName: "Иван Иванов",
+        participantPhone: "+79001234567",
+      })
+    );
+
+    expect(result).toEqual({ ok: true, message: "Заявка принята!" });
+    expect(mockPrisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order-1", status: "DRAFT" },
+      data: expect.objectContaining({ status: "SUBMITTED" }),
+    });
+    expect(mockRecalcDeliveryShares).toHaveBeenCalledWith("proc-1", expect.anything());
   });
 });
